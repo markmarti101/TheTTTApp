@@ -1,0 +1,24 @@
+:root {
+  --color-bg: #f8fafc;
+  --color-text: #0f172a;
+  --color-primary: #0d9488;
+  --color-primary-hover: #0f766e;
+  --color-border: #e2e8f0;
+}
+
+[data-theme="dark"] {
+  --color-bg: #0f172a;
+  --color-text: #f8fafc;
+  --color-border: #334155;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+}

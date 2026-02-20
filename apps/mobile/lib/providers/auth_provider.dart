@@ -7,11 +7,13 @@ typedef UserRole = String; // 'training_company' | 'freelance_trainer' | 'client
 class AuthProvider extends ChangeNotifier {
   User? _user;
   UserRole? _role;
+  String? _trainingCompanyId;
   bool _loading = true;
   String? _error;
 
   User? get user => _user;
   UserRole? get role => _role;
+  String? get trainingCompanyId => _trainingCompanyId;
   bool get loading => _loading;
   String? get error => _error;
   bool get isAuthenticated => _user != null && _role != null;
@@ -30,9 +32,13 @@ class AuthProvider extends ChangeNotifier {
           await FirebaseAuth.instance.signOut();
           _user = null;
           _role = null;
+          _trainingCompanyId = null;
+        } else {
+          _trainingCompanyId = await _fetchTrainingCompanyId(user.uid, _role);
         }
       } else {
         _role = null;
+        _trainingCompanyId = null;
       }
       _loading = false;
       notifyListeners();
@@ -54,6 +60,19 @@ class AuthProvider extends ChangeNotifier {
     return null;
   }
 
+  Future<String?> _fetchTrainingCompanyId(String uid, UserRole? role) async {
+    if (role != 'training_company') return null;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('training_companies')
+          .where('admins', arrayContains: uid)
+          .limit(1)
+          .get();
+      if (snap.docs.isNotEmpty) return snap.docs.first.id;
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> signUp(String email, String password, UserRole role) async {
     _error = null;
     try {
@@ -65,6 +84,9 @@ class AuthProvider extends ChangeNotifier {
       if (uid != null) {
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
           'role': role,
+          'email': email.trim(),
+          'createdAt': DateTime.now().toUtc().toIso8601String(),
+          'updatedAt': DateTime.now().toUtc().toIso8601String(),
         });
       }
     } on FirebaseAuthException catch (e) {
@@ -107,6 +129,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> signOut() async {
     await FirebaseAuth.instance.signOut();
     _role = null;
+    _trainingCompanyId = null;
     notifyListeners();
   }
 

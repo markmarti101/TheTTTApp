@@ -11,6 +11,7 @@
  * - venues
  * - resources
  * - documents
+ * - course_requests
  */
 
 export const COLLECTIONS = {
@@ -22,5 +23,6 @@ export const COLLECTIONS = {
   VENUES: 'venues',
   RESOURCES: 'resources',
   DOCUMENTS: 'documents',
+  COURSE_REQUESTS: 'course_requests',
   AUDIT_LOG: 'audit_log',
 } as const;

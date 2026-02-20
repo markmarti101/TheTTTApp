@@ -47,6 +47,22 @@ service cloud.firestore {
       allow create, update, delete: if isAuth() && (isOwner(clientId) || getUserRole() == 'training_company');
     }
 
+    // Course requests: company admins or client (creator)
+    match /course_requests/{requestId} {
+      allow read: if isAuth() && (
+        isCompanyAdmin(resource.data.trainingCompanyId) ||
+        request.auth.uid == resource.data.clientId
+      );
+      allow create: if isAuth() && (
+        request.auth.uid == request.resource.data.clientId ||
+        isCompanyAdmin(request.resource.data.trainingCompanyId)
+      );
+      allow update, delete: if isAuth() && (
+        isCompanyAdmin(resource.data.trainingCompanyId) ||
+        request.auth.uid == resource.data.clientId
+      );
+    }
+
     // Courses: company admins, assigned trainer, or client
     match /courses/{courseId} {
       allow read: if isAuth() && (

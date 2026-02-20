@@ -110,6 +110,25 @@ export interface Delegate {
   history?: string[]; // Course IDs
 }
 
+// --- Course Request (client → company) ---
+export type CourseRequestStatus = 'pending' | 'reviewed' | 'approved' | 'declined';
+
+export interface CourseRequest {
+  id: string;
+  trainingCompanyId: string;
+  clientId: string;
+  title: string;
+  topic?: string;
+  preferredDates?: string[]; // ISO dates
+  venuePreference?: string;
+  delegateCount?: number;
+  notes?: string;
+  status: CourseRequestStatus;
+  declineReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // --- Course & Scheduling ---
 export interface Course {
   id: string;

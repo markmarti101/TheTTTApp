@@ -56,6 +56,23 @@
         { "fieldPath": "collection", "order": "ASCENDING" },
         { "fieldPath": "timestamp", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "course_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "trainingCompanyId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "course_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "trainingCompanyId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

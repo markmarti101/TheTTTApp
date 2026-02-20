@@ -8,13 +8,18 @@
     "packages/*"
   ],
   "scripts": {
+    "firestore:deploy": "firebase deploy --only firestore",
+    "firestore:rules": "firebase deploy --only firestore:rules",
+    "firestore:indexes": "firebase deploy --only firestore:indexes",
     "build:shared": "npm run build -w @training-triangle/shared",
     "dev:api": "npm run dev -w @training-triangle/api",
     "dev:web": "npm run dev -w @training-triangle/web",
-    "dev:mobile": "npm run start -w @training-triangle/mobile",
+    "dev:mobile": "cd apps/mobile && flutter run",
+    "mobile:ios": "cd apps/mobile && flutter run -d ios",
+    "mobile:android": "cd apps/mobile && flutter run -d android",
     "build:api": "npm run build -w @training-triangle/api",
     "build:web": "npm run build -w @training-triangle/web",
-    "build:mobile": "npm run build -w @training-triangle/mobile",
+    "build:mobile": "cd apps/mobile && flutter build apk",
     "build": "npm run build:api && npm run build:web",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"
@@ -30,5 +35,11 @@
     "compliance"
   ],
   "author": "",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "dependencies": {
+    "firebase": "^12.9.0"
+  },
+  "devDependencies": {
+    "firebase-tools": "^13.0.0"
+  }
 }

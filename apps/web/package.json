@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@training-triangle/shared": "*",
+    "firebase": "^10.7.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.21.0"
@@ -20,6 +21,6 @@
     "@types/react-dom": "^18.2.18",
     "@vitejs/plugin-react": "^4.2.1",
     "typescript": "^5.3.0",
-    "vite": "^5.0.8"
+    "vite": "^7.3.1"
   }
 }

@@ -10,15 +10,18 @@ The Training Triangle App is a cross-platform web and mobile application that co
 - Reporting suite and LMS integration  
 
 ## 🧩 Tech Stack
-- Frontend: React Native (mobile), React.js (web)  
+- Mobile: Flutter (iOS & Android)  
+- Web: React.js (Vite)  
 - Backend: Node.js / Firebase / AWS Lambda  
 - Database: Firestore or PostgreSQL  
 - Integrations: Stripe, Xero, Moodle, DocuSign  
 
 ## 🗂️ Repository Info
 This repository contains:
-- `/frontend` – React Native & React code  
-- `/backend` – API & server logic  
-- `/docs` – Design mockups and specifications  
+- `apps/mobile` – Flutter mobile app  
+- `apps/web` – React web app  
+- `apps/api` – Node.js API  
+- `packages/shared` – Shared types & constants  
+- `docs/` – Specifications and setup guides  
 
 

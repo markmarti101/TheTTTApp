@@ -1,0 +1,28 @@
+{
+  "project_info": {
+    "project_number": "861837788735",
+    "project_id": "training-triangle-app",
+    "storage_bucket": "training-triangle-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:861837788735:android:7b858039d08984fc4e1a8a",
+        "android_client_info": {
+          "package_name": "com.trainingtriangle.training_triangle"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAVISBFPZ7vcIJrV1qLvUoqNFPIL4id87U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ]
+}

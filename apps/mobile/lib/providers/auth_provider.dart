@@ -1,10 +1,13 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import '../services/client_invites_service.dart';
 
-typedef UserRole = String; // 'training_company' | 'freelance_trainer' | 'client'
+typedef UserRole =
+    String; // 'training_company' | 'freelance_trainer' | 'client'
 
 class AuthProvider extends ChangeNotifier {
+  final _invitesService = ClientInvitesService();
   User? _user;
   UserRole? _role;
   String? _trainingCompanyId;
@@ -28,6 +31,9 @@ class AuthProvider extends ChangeNotifier {
       _error = null;
       if (user != null) {
         _role = await _fetchRole(user.uid);
+        if (_role == 'client') {
+          await _claimClientInviteIfAny(user.uid, user.email);
+        }
         if (_role == null) {
           await FirebaseAuth.instance.signOut();
           _user = null;
@@ -43,6 +49,38 @@ class AuthProvider extends ChangeNotifier {
       _loading = false;
       notifyListeners();
     });
+  }
+
+  Future<void> _claimClientInviteIfAny(String uid, String? email) async {
+    final normalizedEmail = email?.trim().toLowerCase();
+    if (normalizedEmail == null || normalizedEmail.isEmpty) return;
+    try {
+      final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+      final userSnap = await userRef.get();
+      final existing = userSnap.data();
+      final alreadyLinked =
+          (existing?['companyId'] as String?)?.isNotEmpty == true;
+      if (alreadyLinked) return;
+
+      final invite = await _invitesService.claimInviteForEmail(
+        uid: uid,
+        email: normalizedEmail,
+      );
+      if (invite == null) return;
+
+      final now = DateTime.now().toUtc().toIso8601String();
+      await userRef.set({
+        'role': 'client',
+        'email': normalizedEmail,
+        'displayName':
+            (invite['displayName'] as String?) ?? existing?['displayName'],
+        'organisation':
+            (invite['organisation'] as String?) ?? existing?['organisation'],
+        'companyId': invite['companyId'],
+        'updatedAt': now,
+        if (existing == null) 'createdAt': now,
+      }, SetOptions(merge: true));
+    } catch (_) {}
   }
 
   Future<UserRole?> _fetchRole(String uid) async {
@@ -61,15 +99,73 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<String?> _fetchTrainingCompanyId(String uid, UserRole? role) async {
-    if (role != 'training_company') return null;
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('training_companies')
-          .where('admins', arrayContains: uid)
-          .limit(1)
-          .get();
-      if (snap.docs.isNotEmpty) return snap.docs.first.id;
-    } catch (_) {}
+    if (role == 'training_company') {
+      // 1. Fast path: user doc already stores companyId.
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get();
+        final userCompanyId = userDoc.data()?['companyId'] as String?;
+        if (userCompanyId != null && userCompanyId.isNotEmpty) {
+          return userCompanyId;
+        }
+      } catch (e) {
+        debugPrint('[AuthProvider] Failed reading user doc companyId: $e');
+      }
+
+      // 2. Query training_companies where user is in admins array.
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('training_companies')
+            .where('admins', arrayContains: uid)
+            .limit(1)
+            .get();
+        if (snap.docs.isNotEmpty) {
+          final companyId = snap.docs.first.id;
+          // Cache on user doc for faster future lookups.
+          FirebaseFirestore.instance.collection('users').doc(uid).set({
+            'companyId': companyId,
+            'updatedAt': DateTime.now().toUtc().toIso8601String(),
+          }, SetOptions(merge: true)).catchError((_) {});
+          return companyId;
+        }
+      } catch (e) {
+        debugPrint('[AuthProvider] Failed querying admins array: $e');
+      }
+
+      // 3. Fallback for older records that only have ownerId.
+      try {
+        final ownerSnap = await FirebaseFirestore.instance
+            .collection('training_companies')
+            .where('ownerId', isEqualTo: uid)
+            .limit(1)
+            .get();
+        if (ownerSnap.docs.isNotEmpty) {
+          final companyId = ownerSnap.docs.first.id;
+          FirebaseFirestore.instance.collection('users').doc(uid).set({
+            'companyId': companyId,
+            'updatedAt': DateTime.now().toUtc().toIso8601String(),
+          }, SetOptions(merge: true)).catchError((_) {});
+          return companyId;
+        }
+      } catch (e) {
+        debugPrint('[AuthProvider] Failed querying ownerId: $e');
+      }
+    } else if (role == 'client') {
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get();
+        final companyId = userDoc.data()?['companyId'] as String?;
+        if (companyId != null && companyId.isNotEmpty) {
+          return companyId;
+        }
+      } catch (e) {
+        debugPrint('[AuthProvider] Failed reading client companyId: $e');
+      }
+    }
     return null;
   }
 
@@ -135,6 +231,36 @@ class AuthProvider extends ChangeNotifier {
 
   void clearError() {
     _error = null;
+    notifyListeners();
+  }
+
+  /// Called when an existing client claims a pending invite.
+  /// Writes companyId to their user doc and updates the provider state.
+  Future<void> linkClientToCompany(String uid, String companyId) async {
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'companyId': companyId,
+        'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      }, SetOptions(merge: true));
+      _trainingCompanyId = companyId;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[AuthProvider] linkClientToCompany failed: $e');
+      rethrow;
+    }
+  }
+
+  /// Call after creating a training company so the app picks up trainingCompanyId.
+  /// Pass [knownCompanyId] when you have the new doc ID from the create call.
+  Future<void> refreshTrainingCompanyId([String? knownCompanyId]) async {
+    if (knownCompanyId != null && knownCompanyId.isNotEmpty) {
+      _trainingCompanyId = knownCompanyId;
+      notifyListeners();
+      return;
+    }
+    final uid = _user?.uid;
+    if (uid == null || _role == null) return;
+    _trainingCompanyId = await _fetchTrainingCompanyId(uid, _role);
     notifyListeners();
   }
 }

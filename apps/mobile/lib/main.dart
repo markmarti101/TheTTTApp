@@ -5,6 +5,7 @@ import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/training_company_home_screen.dart';
 import 'core/theme.dart';
 
 void main() async {
@@ -52,6 +53,9 @@ class AuthWrapper extends StatelessWidget {
           );
         }
         if (auth.isAuthenticated) {
+          if (auth.role == 'training_company') {
+            return const TrainingCompanyHomeScreen();
+          }
           return const DashboardScreen();
         }
         return const LoginScreen();

@@ -208,7 +208,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: RadioListTile<String>(
                   value: e.key,
+                  // ignore: deprecated_member_use
                   groupValue: _selectedRole,
+                  // ignore: deprecated_member_use
                   onChanged: (v) => setState(() => _selectedRole = v),
                   title: Text(
                     e.value,

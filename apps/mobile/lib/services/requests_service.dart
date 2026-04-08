@@ -19,6 +19,41 @@ class RequestsService {
         .toList();
   }
 
+  Future<void> createRequest({
+    required String trainingCompanyId,
+    required String clientId,
+    required String title,
+    String? topic,
+    String? preferredDateIso,
+    String? notes,
+  }) async {
+    final now = DateTime.now().toUtc().toIso8601String();
+    await _firestore.collection(_requests).add({
+      'trainingCompanyId': trainingCompanyId,
+      'clientId': clientId,
+      'title': title,
+      'topic': topic,
+      'preferredDates':
+          preferredDateIso != null && preferredDateIso.isNotEmpty ? [preferredDateIso] : null,
+      'notes': notes,
+      'status': 'pending',
+      'createdAt': now,
+      'updatedAt': now,
+    });
+  }
+
+  Future<List<CourseRequest>> getRequestsByClient(String clientId) async {
+    final snap = await _firestore
+        .collection(_requests)
+        .where('clientId', isEqualTo: clientId)
+        .get();
+    final list = snap.docs
+        .map((d) => CourseRequest.fromFirestore(d.id, d.data()))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
+  }
+
   Future<CourseRequest?> getRequest(String id) async {
     final doc = await _firestore.collection(_requests).doc(id).get();
     if (!doc.exists) return null;
@@ -47,6 +82,9 @@ class RequestsService {
     String requestId,
     String trainerId,
     DateTime scheduledAt,
+    {
+    String? venueId,
+    }
   ) async {
     final req = await getRequest(requestId);
     if (req == null) throw Exception('Request not found');
@@ -65,6 +103,7 @@ class RequestsService {
       'trainingCompanyId': req.trainingCompanyId,
       'clientId': req.clientId,
       'trainerId': trainerId,
+      if (venueId != null && venueId.isNotEmpty) 'venueId': venueId,
       'startDate': scheduledAt.toUtc().toIso8601String(),
       'endDate': endDate.toUtc().toIso8601String(),
       'status': 'pending_trainer',

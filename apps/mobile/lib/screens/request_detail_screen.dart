@@ -2,14 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/theme.dart';
 import '../models/course_request.dart';
+import '../models/venue.dart';
 import '../providers/auth_provider.dart';
 import '../services/requests_service.dart';
+import '../services/venues_service.dart';
 import '../services/trainers_service.dart';
 
 class RequestDetailScreen extends StatefulWidget {
   final String requestId;
+  final String? initialAction; // 'approve' | 'decline'
 
-  const RequestDetailScreen({super.key, required this.requestId});
+  const RequestDetailScreen({
+    super.key,
+    required this.requestId,
+    this.initialAction,
+  });
 
   @override
   State<RequestDetailScreen> createState() => _RequestDetailScreenState();
@@ -18,14 +25,17 @@ class RequestDetailScreen extends StatefulWidget {
 class _RequestDetailScreenState extends State<RequestDetailScreen> {
   final _requestsService = RequestsService();
   final _trainersService = TrainersService();
+  final _venuesService = VenuesService();
 
   CourseRequest? _request;
   List<TrainerOption> _trainers = [];
+  List<Venue> _venues = [];
   bool _loading = true;
   bool _actionLoading = false;
   String? _loadError;
 
   String _trainerId = '';
+  String _venueId = '';
   DateTime? _scheduledAt;
   final _declineReasonController = TextEditingController();
   final _trainerIdController = TextEditingController();
@@ -36,6 +46,8 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _showApprove = widget.initialAction == 'approve';
+    _showDecline = widget.initialAction == 'decline';
     _load();
   }
 
@@ -57,10 +69,14 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
         companyId != null
             ? _trainersService.getTrainers(companyId)
             : Future.value(<TrainerOption>[]),
+        companyId != null
+            ? _venuesService.getVenues(companyId)
+            : Future.value(<Venue>[]),
       ]);
 
       final req = results[0] as CourseRequest?;
       final trainers = results[1] as List<TrainerOption>;
+      final venues = results[2] as List<Venue>;
 
       if (req != null && req.status == 'pending') {
         await _requestsService.markRequestReviewed(widget.requestId);
@@ -83,8 +99,10 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
 
       setState(() {
         _trainers = trainers;
+        _venues = venues;
         _trainerId = trainers.isNotEmpty ? trainers.first.id : '';
         _trainerIdController.text = _trainerId;
+        _venueId = venues.isNotEmpty ? venues.first.id : '';
         _loading = false;
       });
     } catch (e) {
@@ -109,6 +127,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
       );
       return;
     }
+    // Venue is optional for now (we only require it if you have venues created).
     if (_scheduledAt == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a date and time')),
@@ -122,6 +141,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
         widget.requestId,
         _trainerId,
         _scheduledAt!,
+        venueId: _venueId.isEmpty ? null : _venueId,
       );
       if (mounted) {
         Navigator.pop(context);
@@ -131,9 +151,9 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _actionLoading = false);
@@ -143,9 +163,9 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
   Future<void> _handleDecline() async {
     final reason = _declineReasonController.text.trim();
     if (reason.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a reason')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please enter a reason')));
       return;
     }
 
@@ -154,15 +174,15 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
       await _requestsService.declineRequest(widget.requestId, reason);
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Request declined')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Request declined')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _actionLoading = false);
@@ -184,121 +204,117 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
               child: CircularProgressIndicator(color: AppColors.primary),
             )
           : _request == null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _loadError ?? 'Request not found',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Back'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _request!.title,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.text,
+                    ),
+                  ),
+                  if (_request!.topic != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Topic: ${_request!.topic}',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Text(
+                    'Status: ${_request!.status}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                  if (_request!.preferredDates != null &&
+                      _request!.preferredDates!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Preferred: ${_request!.preferredDates!.join(", ")}',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                  if (_request!.notes != null &&
+                      _request!.notes!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Notes: ${_request!.notes}',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                  if (_request!.declineReason != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Declined: ${_request!.declineReason}',
+                      style: const TextStyle(
+                        color: Color(0xFFEF4444),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                  if (_canAct && !_showApprove && !_showDecline) ...[
+                    const SizedBox(height: 32),
+                    Row(
                       children: [
-                        Text(
-                          _loadError ?? 'Request not found',
-                          textAlign: TextAlign.center,
+                        ElevatedButton(
+                          onPressed: () => setState(() => _showApprove = true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Approve'),
                         ),
-                        const SizedBox(height: 16),
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Back'),
+                        const SizedBox(width: 12),
+                        OutlinedButton(
+                          onPressed: () => setState(() => _showDecline = true),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFEF4444),
+                            side: const BorderSide(color: Color(0xFFEF4444)),
+                          ),
+                          child: const Text('Decline'),
                         ),
                       ],
                     ),
-                  ),
-                )
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _request!.title,
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.text,
-                        ),
-                      ),
-                      if (_request!.topic != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Topic: ${_request!.topic}',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 8),
-                      Text(
-                        'Status: ${_request!.status}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                        ),
-                      ),
-                      if (_request!.preferredDates != null &&
-                          _request!.preferredDates!.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Preferred: ${_request!.preferredDates!.join(", ")}',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                      if (_request!.notes != null && _request!.notes!.isNotEmpty)
-                        ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            'Notes: ${_request!.notes}',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      if (_request!.declineReason != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Declined: ${_request!.declineReason}',
-                          style: const TextStyle(
-                            color: Color(0xFFEF4444),
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                      if (_canAct && !_showApprove && !_showDecline) ...[
-                        const SizedBox(height: 32),
-                        Row(
-                          children: [
-                            ElevatedButton(
-                              onPressed: () =>
-                                  setState(() => _showApprove = true),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: Colors.white,
-                              ),
-                              child: const Text('Approve'),
-                            ),
-                            const SizedBox(width: 12),
-                            OutlinedButton(
-                              onPressed: () =>
-                                  setState(() => _showDecline = true),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFFEF4444),
-                                side: const BorderSide(
-                                  color: Color(0xFFEF4444),
-                                ),
-                              ),
-                              child: const Text('Decline'),
-                            ),
-                          ],
-                        ),
-                      ],
-                      if (_showApprove) _buildApproveForm(),
-                      if (_showDecline) _buildDeclineForm(),
-                    ],
-                  ),
-                ),
+                  ],
+                  if (_showApprove) _buildApproveForm(),
+                  if (_showDecline) _buildDeclineForm(),
+                ],
+              ),
+            ),
     );
   }
 
@@ -330,14 +346,18 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
               initialValue: _trainerId.isEmpty ? null : _trainerId,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
               ),
               items: _trainers
-                  .map((t) => DropdownMenuItem(
-                        value: t.id,
-                        child: Text(t.displayName ?? t.email),
-                      ))
+                  .map(
+                    (t) => DropdownMenuItem(
+                      value: t.id,
+                      child: Text(t.displayName ?? t.email),
+                    ),
+                  )
                   .toList(),
               onChanged: (v) {
                 setState(() {
@@ -350,15 +370,41 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
           TextField(
             controller: _trainerIdController,
             decoration: InputDecoration(
-              labelText:
-                  _trainers.isEmpty ? 'Trainer ID (required)' : 'Or type trainer ID',
+              labelText: _trainers.isEmpty
+                  ? 'Trainer ID (required)'
+                  : 'Or type trainer ID',
               border: const OutlineInputBorder(),
             ),
             onChanged: (v) => setState(() => _trainerId = v),
           ),
+          if (_venues.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Text('Venue', style: TextStyle(fontWeight: FontWeight.w500)),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              initialValue: _venueId.isEmpty ? null : _venueId,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+              ),
+              items: _venues
+                  .map(
+                    (v) => DropdownMenuItem(value: v.id, child: Text(v.name)),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                setState(() => _venueId = v ?? '');
+              },
+            ),
+          ],
           const SizedBox(height: 16),
-          const Text('Scheduled date & time',
-              style: TextStyle(fontWeight: FontWeight.w500)),
+          const Text(
+            'Scheduled date & time',
+            style: TextStyle(fontWeight: FontWeight.w500),
+          ),
           const SizedBox(height: 8),
           ListTile(
             contentPadding: EdgeInsets.zero,

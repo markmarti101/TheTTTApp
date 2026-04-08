@@ -27,12 +27,38 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAuth() && (request.auth.uid == userId || getUserRole() == 'training_company');
       allow create: if isAuth();
-      allow update, delete: if isOwner(userId);
+      allow update, delete: if isOwner(userId) ||
+        (
+          getUserRole() == 'training_company' &&
+          resource.data.role == 'client' &&
+          resource.data.companyId is string &&
+          isCompanyAdmin(resource.data.companyId)
+        ) ||
+        // Allow a client to write their own companyId when claiming an invite.
+        (
+          isOwner(userId) &&
+          request.resource.data.role == 'client'
+        );
     }
 
-    // Training companies: admins only
+    // Training companies: create allowed for training_company users (self as admin); else admins only
     match /training_companies/{companyId} {
-      allow read, write: if isAuth() && isCompanyAdmin(companyId);
+      allow create: if isAuth()
+        // Do not rely on users/{uid}.role existing yet; self-owned create is allowed.
+        && request.resource.data.ownerId == request.auth.uid
+        && request.auth.uid in request.resource.data.admins
+        // Required onboarding fields
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.businessEmail is string
+        && request.resource.data.businessEmail.size() > 0;
+      // Allow read if user is in admins array, is the owner, or is a linked client/trainer.
+      allow read: if isAuth() && (
+        request.auth.uid in resource.data.admins ||
+        resource.data.ownerId == request.auth.uid ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == companyId
+      );
+      allow update, delete: if isAuth() && isCompanyAdmin(companyId);
     }
 
     // Freelance trainers: own profile or company admin
@@ -61,6 +87,52 @@ service cloud.firestore {
         isCompanyAdmin(resource.data.trainingCompanyId) ||
         request.auth.uid == resource.data.clientId
       );
+    }
+
+    // Client invites: created by company admins, claimed by invited client account
+    match /client_invites/{inviteId} {
+      // Individual document read: only company admin or client role.
+      allow get: if isAuth() && (
+        isCompanyAdmin(resource.data.companyId) ||
+        getUserRole() == 'client'
+      );
+      // List queries (e.g. where email == x): allowed for training company admins
+      // and clients. App-level code is responsible for scoping queries correctly.
+      allow list: if isAuth() && (
+        getUserRole() == 'training_company' ||
+        getUserRole() == 'client'
+      );
+
+      allow create: if isAuth() &&
+        getUserRole() == 'training_company' &&
+        request.resource.data.companyId is string &&
+        isCompanyAdmin(request.resource.data.companyId) &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.email is string &&
+        request.resource.data.email.size() > 3;
+
+      allow update: if isAuth() && (
+        // Company admin can maintain pending invites for their company
+        (
+          getUserRole() == 'training_company' &&
+          resource.data.companyId is string &&
+          isCompanyAdmin(resource.data.companyId)
+        ) ||
+        // Client can only claim a pending invite and only for themselves
+        (
+          getUserRole() == 'client' &&
+          resource.data.status == 'pending' &&
+          request.resource.data.status == 'claimed' &&
+          request.resource.data.claimedByUid == request.auth.uid &&
+          request.resource.data.companyId == resource.data.companyId &&
+          request.resource.data.email == resource.data.email
+        )
+      );
+
+      allow delete: if isAuth() &&
+        getUserRole() == 'training_company' &&
+        resource.data.companyId is string &&
+        isCompanyAdmin(resource.data.companyId);
     }
 
     // Courses: company admins, assigned trainer, or client

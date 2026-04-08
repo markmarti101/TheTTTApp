@@ -15,6 +15,7 @@ class TrainersService {
     final snap = await _firestore
         .collection('users')
         .where('role', isEqualTo: 'freelance_trainer')
+        .where('companyId', isEqualTo: trainingCompanyId)
         .get();
 
     return snap.docs.map((d) {

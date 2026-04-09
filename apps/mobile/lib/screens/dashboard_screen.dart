@@ -11,6 +11,7 @@ import '../services/requests_service.dart';
 import '../services/client_invites_service.dart';
 import 'course_request_screen.dart';
 import 'client_requests_screen.dart';
+import 'client_delegates_tab.dart';
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
@@ -152,10 +153,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               loading: _dataLoading && !_dataLoaded,
               onRefresh: () => _refresh(auth),
             ),
-            const _ComingSoonTab(
-              label: 'Delegates',
-              icon: Icons.group_outlined,
-            ),
+            ClientDelegatesTab(clientId: auth.user!.uid),
             _ProfileTab(auth: auth),
           ],
         ),
@@ -882,36 +880,6 @@ class _FreelancerScreen extends StatelessWidget {
                       fontSize: 15, color: AppColors.textSecondary)),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Coming Soon Tab ──────────────────────────────────────────────────────────
-
-class _ComingSoonTab extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  const _ComingSoonTab({required this.label, required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: const Color(0xFFCCCCCC)),
-            const SizedBox(height: 14),
-            Text(label,
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 6),
-            Text('Coming soon',
-                style: TextStyle(
-                    fontSize: 14, color: AppColors.textSecondary)),
-          ],
         ),
       ),
     );

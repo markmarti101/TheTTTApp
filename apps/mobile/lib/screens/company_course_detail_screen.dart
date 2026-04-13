@@ -30,6 +30,7 @@ class _CompanyCourseDetailScreenState
   bool _loading = true;
   String? _error;
   bool _assigningVenue = false;
+  bool _markingComplete = false;
 
   @override
   void initState() {
@@ -101,6 +102,50 @@ class _CompanyCourseDetailScreenState
     }
   }
 
+  Future<void> _confirmMarkComplete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Mark as Completed?',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+        ),
+        content: const Text(
+          'This will mark the course as completed and the client will be able to view their certificate and leave feedback.',
+          style: TextStyle(fontSize: 14, color: Color(0xFF475569), height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel',
+                style: TextStyle(color: Color(0xFF94A3B8))),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Mark Complete',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    setState(() => _markingComplete = true);
+    try {
+      await _coursesService.markCourseCompleted(widget.courseId);
+      await _load();
+    } finally {
+      if (mounted) setState(() => _markingComplete = false);
+    }
+  }
+
   Future<void> _showAssignVenueSheet() async {
     final course = _course;
     if (course == null) return;
@@ -140,7 +185,7 @@ class _CompanyCourseDetailScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: _loading || _assigningVenue
+      body: _loading || _assigningVenue || _markingComplete
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary))
           : _error != null
@@ -153,6 +198,7 @@ class _CompanyCourseDetailScreenState
                       clientDisplay: _clientDisplay,
                       trainerDisplay: _trainerDisplay,
                       onAssignVenue: _showAssignVenueSheet,
+                      onMarkComplete: _confirmMarkComplete,
                     ),
     );
   }
@@ -166,6 +212,7 @@ class _CourseBody extends StatelessWidget {
   final String? clientDisplay;
   final String? trainerDisplay;
   final VoidCallback onAssignVenue;
+  final VoidCallback onMarkComplete;
 
   const _CourseBody({
     required this.course,
@@ -173,6 +220,7 @@ class _CourseBody extends StatelessWidget {
     required this.clientDisplay,
     required this.trainerDisplay,
     required this.onAssignVenue,
+    required this.onMarkComplete,
   });
 
   @override
@@ -195,6 +243,50 @@ class _CourseBody extends StatelessWidget {
               if (course.notes != null && course.notes!.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _NotesCard(notes: course.notes!),
+              ],
+              if (course.status != 'completed' && course.status != 'declined') ...[
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: onMarkComplete,
+                    icon: const Icon(Icons.check_circle_outline, size: 20),
+                    label: const Text('Mark as Completed'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                      textStyle: const TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 15),
+                    ),
+                  ),
+                ),
+              ],
+              if (course.status == 'completed') ...[
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFCCFBF1),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.check_circle, color: AppColors.primary, size: 20),
+                      SizedBox(width: 10),
+                      Text(
+                        'This course has been marked as completed.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF0D9488),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ]),
           ),
@@ -559,7 +651,7 @@ class _StatusBadge extends StatelessWidget {
       'approved' => ('Approved', const Color(0xFFDCFCE7), const Color(0xFF16A34A)),
       'pending_trainer' => ('Pending Trainer', const Color(0x33FFFFFF), Colors.white),
       'declined' => ('Declined', const Color(0xFFFEE2E2), const Color(0xFFDC2626)),
-      'completed' => ('Completed', const Color(0xFFDBEAFE), const Color(0xFF2563EB)),
+      'completed' => ('Completed', const Color(0xFFCCFBF1), const Color(0xFF0D9488)),
       _ => (status, const Color(0xFFF1F5F9), const Color(0xFF64748B)),
     };
     return Container(

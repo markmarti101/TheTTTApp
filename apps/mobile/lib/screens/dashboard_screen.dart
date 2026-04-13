@@ -12,6 +12,7 @@ import '../services/client_invites_service.dart';
 import 'course_request_screen.dart';
 import 'client_requests_screen.dart';
 import 'client_delegates_tab.dart';
+import 'client_course_detail_screen.dart';
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
@@ -53,13 +54,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       final coursesFuture = _coursesService.getCoursesByClient(uid);
       final requestsFuture = _requestsService.getRequestsByClient(uid);
-      final companyFuture = FirebaseFirestore.instance
-          .collection('training_companies')
-          .doc(companyId)
-          .get();
       final courses = await coursesFuture;
       final requests = await requestsFuture;
-      final companyDoc = await companyFuture;
+
+      // Fetch company name separately — permission may not be ready yet.
+      String? fetchedCompanyName;
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('training_companies')
+            .doc(companyId)
+            .get();
+        fetchedCompanyName = snap.data()?['name'] as String?;
+      } catch (_) {}
 
       // Fetch venue names for all courses that have a venueId
       final venueIds = courses
@@ -69,30 +75,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .toSet();
       final venueNames = <String, String>{};
       for (final id in venueIds) {
-        final doc = await FirebaseFirestore.instance
-            .collection('venues')
-            .doc(id)
-            .get();
-        if (doc.exists) {
-          final data = doc.data()!;
-          final name = (data['name'] as String?) ?? '';
-          final address = (data['address'] as String?) ?? '';
-          venueNames[id] = address.isNotEmpty ? '$name · $address' : name;
-        }
+        try {
+          final doc = await FirebaseFirestore.instance
+              .collection('venues')
+              .doc(id)
+              .get();
+          if (doc.exists) {
+            final data = doc.data()!;
+            final name = (data['name'] as String?) ?? '';
+            final address = (data['address'] as String?) ?? '';
+            venueNames[id] = address.isNotEmpty ? '$name · $address' : name;
+          }
+        } catch (_) {}
       }
 
       if (mounted) {
         setState(() {
           _courses = courses;
           _requests = requests;
-          _companyName =
-              companyDoc.data()?['name'] as String? ?? 'Your Company';
+          _companyName = fetchedCompanyName ?? 'Your Company';
           _venueNames = venueNames;
           _dataLoaded = true;
           _dataLoading = false;
         });
       }
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[DashboardScreen] _loadData error: $e\n$st');
       // Mark as loaded even on error so the UI doesn't spin forever.
       if (mounted) setState(() { _dataLoading = false; _dataLoaded = true; });
     }
@@ -117,10 +125,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     final now = DateTime.now();
-    final upcoming = _courses.where((c) => c.startDate.isAfter(now)).toList()
+    final thirtyDaysAgo = now.subtract(const Duration(days: 30));
+    final upcoming = _courses
+        .where((c) => c.startDate.isAfter(thirtyDaysAgo))
+        .toList()
       ..sort((a, b) => a.startDate.compareTo(b.startDate));
     final pastCount =
-        _courses.where((c) => !c.startDate.isAfter(now)).length;
+        _courses.where((c) => !c.startDate.isAfter(thirtyDaysAgo)).length;
     final activeRequests = _requests
         .where((r) => r.status == 'pending' || r.status == 'reviewed')
         .toList();
@@ -1071,7 +1082,17 @@ class _CourseCard extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: Container(
+      child: GestureDetector(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ClientCourseDetailScreen(
+              course: course,
+              venueName: venueName,
+            ),
+          ),
+        ),
+        child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -1151,6 +1172,7 @@ class _CourseCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1243,8 +1265,8 @@ class _StatusChip extends StatelessWidget {
         label = 'Pending';
         break;
       case 'reviewed':
-        bg = const Color(0xFFDBEAFE);
-        fg = const Color(0xFF2563EB);
+        bg = const Color(0xFFCCFBF1);
+        fg = const Color(0xFF0D9488);
         label = 'Reviewed';
         break;
       case 'approved':

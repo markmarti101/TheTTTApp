@@ -208,7 +208,7 @@ class _ClientRequestsScreenState extends State<ClientRequestsScreen> {
       case 'pending':
         return const Color(0xFFD97706);
       case 'reviewed':
-        return const Color(0xFF2563EB);
+        return const Color(0xFF0D9488);
       case 'approved':
         return const Color(0xFF059669);
       case 'declined':
@@ -428,8 +428,8 @@ class _StatusChip extends StatelessWidget {
         label = 'Pending';
         break;
       case 'reviewed':
-        bg = const Color(0xFFDBEAFE);
-        fg = const Color(0xFF2563EB);
+        bg = const Color(0xFFCCFBF1);
+        fg = const Color(0xFF0D9488);
         label = 'Reviewed';
         break;
       case 'approved':

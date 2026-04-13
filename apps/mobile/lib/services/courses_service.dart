@@ -43,5 +43,12 @@ class CoursesService {
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
     });
   }
+
+  Future<void> markCourseCompleted(String courseId) async {
+    await _firestore.collection('courses').doc(courseId).update({
+      'status': 'completed',
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
 }
 

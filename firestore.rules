@@ -56,7 +56,10 @@ service cloud.firestore {
       allow read: if isAuth() && (
         request.auth.uid in resource.data.admins ||
         resource.data.ownerId == request.auth.uid ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == companyId
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == companyId
+        )
       );
       allow update, delete: if isAuth() && isCompanyAdmin(companyId);
     }
@@ -146,11 +149,15 @@ service cloud.firestore {
       allow update, delete: if isAuth() && isCompanyAdmin(resource.data.trainingCompanyId);
     }
 
-    // Venues: company admins or client (if client-owned)
+    // Venues: company admins, linked clients, or client-owned
     match /venues/{venueId} {
       allow read: if isAuth() && (
         isCompanyAdmin(resource.data.trainingCompanyId) ||
-        request.auth.uid == resource.data.clientId
+        request.auth.uid == resource.data.clientId ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.trainingCompanyId
+        )
       );
       allow create: if isAuth() && isCompanyAdmin(request.resource.data.trainingCompanyId);
       allow update, delete: if isAuth() && isCompanyAdmin(resource.data.trainingCompanyId);
@@ -177,6 +184,19 @@ service cloud.firestore {
       allow read: if isAuth() && getUserRole() == 'training_company';
       allow create: if isAuth();
       allow update, delete: if false;
+    }
+
+    // Course feedback: client submits once, company can read
+    match /course_feedback/{courseId} {
+      allow read: if isAuth() && (
+        request.auth.uid == resource.data.clientId ||
+        isCompanyAdmin(resource.data.trainingCompanyId)
+      );
+      allow create: if isAuth() &&
+        request.auth.uid == request.resource.data.clientId;
+      allow update: if isAuth() &&
+        request.auth.uid == resource.data.clientId;
+      allow delete: if false;
     }
   }
 }

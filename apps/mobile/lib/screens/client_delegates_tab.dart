@@ -254,13 +254,13 @@ class _DelegateCard extends StatelessWidget {
   Color _avatarColor(String name) {
     const colors = [
       Color(0xFF2DB89E),
-      Color(0xFF3B82F6),
       Color(0xFF8B5CF6),
       Color(0xFFEC4899),
       Color(0xFFF59E0B),
       Color(0xFF10B981),
       Color(0xFFEF4444),
-      Color(0xFF06B6D4),
+      Color(0xFFF97316),
+      Color(0xFF14B8A6),
     ];
     final hash = name.codeUnits.fold(0, (a, b) => a + b);
     return colors[hash % colors.length];

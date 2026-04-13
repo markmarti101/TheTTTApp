@@ -31,6 +31,7 @@ class _CompanyCourseDetailScreenState
   String? _error;
   bool _assigningVenue = false;
   bool _markingComplete = false;
+  bool _settingPoNumber = false;
 
   @override
   void initState() {
@@ -181,11 +182,73 @@ class _CompanyCourseDetailScreenState
     );
   }
 
+  Future<void> _showSetPoNumberDialog() async {
+    final controller =
+        TextEditingController(text: _course?.poNumber ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Set PO Number',
+            style:
+                TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: 'e.g. PO-2026-001',
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                    color: AppColors.primary, width: 1.5)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel',
+                style: TextStyle(color: Color(0xFF94A3B8))),
+          ),
+          ElevatedButton(
+            onPressed: () =>
+                Navigator.pop(ctx, controller.text.trim()),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Save',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result == null) return;
+    setState(() => _settingPoNumber = true);
+    try {
+      await _coursesService.updatePoNumber(widget.courseId, result);
+      await _load();
+    } finally {
+      if (mounted) setState(() => _settingPoNumber = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: _loading || _assigningVenue || _markingComplete
+      body: _loading ||
+              _assigningVenue ||
+              _markingComplete ||
+              _settingPoNumber
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary))
           : _error != null
@@ -199,6 +262,7 @@ class _CompanyCourseDetailScreenState
                       trainerDisplay: _trainerDisplay,
                       onAssignVenue: _showAssignVenueSheet,
                       onMarkComplete: _confirmMarkComplete,
+                      onSetPoNumber: _showSetPoNumberDialog,
                     ),
     );
   }
@@ -213,6 +277,7 @@ class _CourseBody extends StatelessWidget {
   final String? trainerDisplay;
   final VoidCallback onAssignVenue;
   final VoidCallback onMarkComplete;
+  final VoidCallback onSetPoNumber;
 
   const _CourseBody({
     required this.course,
@@ -221,6 +286,7 @@ class _CourseBody extends StatelessWidget {
     required this.trainerDisplay,
     required this.onAssignVenue,
     required this.onMarkComplete,
+    required this.onSetPoNumber,
   });
 
   @override
@@ -240,6 +306,9 @@ class _CourseBody extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               _VenueCard(venue: venue, onAssign: onAssignVenue),
+              const SizedBox(height: 12),
+              _PONumberCard(
+                  poNumber: course.poNumber, onSet: onSetPoNumber),
               if (course.notes != null && course.notes!.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _NotesCard(notes: course.notes!),
@@ -534,6 +603,53 @@ class _NotesCard extends StatelessWidget {
   }
 }
 
+// ─── PO Number Card ────────────────────────────────────────────────────────────
+
+class _PONumberCard extends StatelessWidget {
+  final String? poNumber;
+  final VoidCallback onSet;
+  const _PONumberCard({required this.poNumber, required this.onSet});
+
+  @override
+  Widget build(BuildContext context) {
+    return _InfoCard(
+      title: 'PO Number',
+      trailing: TextButton(
+        onPressed: onSet,
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: Text(
+          poNumber == null || poNumber!.isEmpty ? 'Set' : 'Edit',
+          style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primary),
+        ),
+      ),
+      children: [
+        poNumber != null && poNumber!.isNotEmpty
+            ? _InfoRow(
+                icon: Icons.confirmation_number_outlined,
+                label: 'PO No.',
+                value: poNumber!,
+              )
+            : const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: Text(
+                    'No PO number assigned',
+                    style: TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
+                  ),
+                ),
+              ),
+      ],
+    );
+  }
+}
+
 // ─── Shared widgets ────────────────────────────────────────────────────────────
 
 class _InfoCard extends StatelessWidget {
@@ -649,7 +765,9 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, bg, fg) = switch (status) {
       'approved' => ('Approved', const Color(0xFFDCFCE7), const Color(0xFF16A34A)),
+      'confirmed' => ('Confirmed', const Color(0xFFDCFCE7), const Color(0xFF16A34A)),
       'pending_trainer' => ('Pending Trainer', const Color(0x33FFFFFF), Colors.white),
+      'trainer_declined' => ('Trainer Declined', const Color(0xFFFEE2E2), const Color(0xFFDC2626)),
       'declined' => ('Declined', const Color(0xFFFEE2E2), const Color(0xFFDC2626)),
       'completed' => ('Completed', const Color(0xFFCCFBF1), const Color(0xFF0D9488)),
       _ => (status, const Color(0xFFF1F5F9), const Color(0xFF64748B)),

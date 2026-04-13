@@ -20,6 +20,8 @@ import 'company_trainers_screen.dart';
 import 'add_client_screen.dart';
 import 'company_venues_screen.dart';
 
+enum _CalendarView { month, week, day, byTrainer }
+
 class TrainingCompanyHomeScreen extends StatefulWidget {
   const TrainingCompanyHomeScreen({super.key});
 
@@ -56,6 +58,9 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
   int _activeTrainers = 0;
   int _activeClients = 0;
   int _pendingBookings = 0;
+
+  _CalendarView _calendarView = _CalendarView.month;
+  List<UserSummary> _trainers = [];
 
   @override
   void initState() {
@@ -178,6 +183,7 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
         _userDisplayName = userDisplayName;
         _activeClients = clients.length;
         _activeTrainers = trainers.length;
+        _trainers = trainers;
         _pendingBookings = requests.where((r) => r.status == 'pending').length;
         _loadingMonth = false;
       });
@@ -647,11 +653,84 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
   }
 
   Widget _buildCalendarTab() {
-    return _loadingMonth
-        ? const Center(
-            child: CircularProgressIndicator(color: AppColors.primary),
-          )
-        : _buildMonthBody(showUpcomingList: false);
+    if (_loadingMonth) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    }
+    return Column(
+      children: [
+        _buildCalendarViewToggle(),
+        Expanded(child: _buildCalendarBody()),
+      ],
+    );
+  }
+
+  Widget _buildCalendarViewToggle() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F0F0),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          _calendarToggleBtn('Month', _CalendarView.month),
+          _calendarToggleBtn('Week', _CalendarView.week),
+          _calendarToggleBtn('Day', _CalendarView.day),
+          _calendarToggleBtn('Trainer', _CalendarView.byTrainer),
+        ],
+      ),
+    );
+  }
+
+  Widget _calendarToggleBtn(String label, _CalendarView view) {
+    final isActive = _calendarView == view;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _calendarView = view),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          decoration: BoxDecoration(
+            color: isActive ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: isActive ? AppColors.primary : AppColors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCalendarBody() {
+    switch (_calendarView) {
+      case _CalendarView.month:
+        return _buildMonthBody(showUpcomingList: false);
+      case _CalendarView.week:
+        return _buildWeekView();
+      case _CalendarView.day:
+        return _buildDayView();
+      case _CalendarView.byTrainer:
+        return _buildByTrainerView();
+    }
   }
 
   Widget _buildDashboardTab() {
@@ -1292,6 +1371,362 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // ── Week View ────────────────────────────────────────────────────────────
+
+  Widget _buildWeekView() {
+    final weekday = _selectedDay.weekday; // 1=Mon, 7=Sun
+    final weekStart = DateTime(
+      _selectedDay.year,
+      _selectedDay.month,
+      _selectedDay.day,
+    ).subtract(Duration(days: weekday - 1));
+    final weekDays =
+        List.generate(7, (i) => weekStart.add(Duration(days: i)));
+
+    final selectedDayCourses = _allCourses
+        .where((c) => _isSameDay(c.startDate, _selectedDay))
+        .toList()
+      ..sort((a, b) => a.startDate.compareTo(b.startDate));
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildWeekNavigator(weekStart),
+          const SizedBox(height: 12),
+          _buildWeekDayStrip(weekDays),
+          const SizedBox(height: 16),
+          Text(
+            'Courses on ${_selectedDay.day} ${_monthShort(_selectedDay.month)}',
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF111111),
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (selectedDayCourses.isEmpty)
+            _buildNoCoursesTile('No courses scheduled for this day.')
+          else
+            ...selectedDayCourses.map(_buildCourseCard),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeekNavigator(DateTime weekStart) {
+    final weekEnd = weekStart.add(const Duration(days: 6));
+    final label = weekStart.month == weekEnd.month
+        ? '${weekStart.day}–${weekEnd.day} ${_monthShort(weekStart.month)} ${weekStart.year}'
+        : '${weekStart.day} ${_monthShort(weekStart.month)} – '
+            '${weekEnd.day} ${_monthShort(weekEnd.month)} ${weekEnd.year}';
+
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.chevron_left),
+          onPressed: () => setState(
+            () => _selectedDay =
+                _selectedDay.subtract(const Duration(days: 7)),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text,
+            ),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.chevron_right),
+          onPressed: () => setState(
+            () =>
+                _selectedDay = _selectedDay.add(const Duration(days: 7)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWeekDayStrip(List<DateTime> weekDays) {
+    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: List.generate(7, (i) {
+          final day = weekDays[i];
+          final isSelected = _isSameDay(day, _selectedDay);
+          final isToday = day == today;
+          final courseCount =
+              _allCourses.where((c) => _isSameDay(c.startDate, day)).length;
+
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _selectedDay = day),
+              child: Column(
+                children: [
+                  Text(
+                    dayLabels[i],
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: isSelected
+                          ? AppColors.primary
+                          : const Color(0xFF94A3B8),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.primary
+                          : (isToday
+                              ? AppColors.primary.withValues(alpha: 0.12)
+                              : null),
+                      borderRadius: BorderRadius.circular(10),
+                      border: isToday && !isSelected
+                          ? Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.4),
+                              width: 1.2,
+                            )
+                          : null,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '${day.day}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: isSelected
+                            ? Colors.white
+                            : (isToday
+                                ? AppColors.primary
+                                : const Color(0xFF374151)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: courseCount > 0
+                          ? (isSelected
+                              ? AppColors.primary
+                              : AppColors.primary.withValues(alpha: 0.5))
+                          : Colors.transparent,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  // ── Day View ─────────────────────────────────────────────────────────────
+
+  Widget _buildDayView() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final dayCourses = _allCourses
+        .where((c) => _isSameDay(c.startDate, _selectedDay))
+        .toList()
+      ..sort((a, b) => a.startDate.compareTo(b.startDate));
+
+    const dayNames = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    final isToday = _selectedDay == today;
+    final dayLabel = isToday
+        ? 'Today, ${_selectedDay.day} ${_monthShort(_selectedDay.month)}'
+        : '${dayNames[_selectedDay.weekday - 1]}, '
+            '${_selectedDay.day} ${_monthShort(_selectedDay.month)} '
+            '${_selectedDay.year}';
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left),
+                onPressed: () => setState(
+                  () => _selectedDay =
+                      _selectedDay.subtract(const Duration(days: 1)),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  dayLabel,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.text,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right),
+                onPressed: () => setState(
+                  () =>
+                      _selectedDay = _selectedDay.add(const Duration(days: 1)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${dayCourses.length} course${dayCourses.length == 1 ? '' : 's'}',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (dayCourses.isEmpty)
+            _buildNoCoursesTile('No courses scheduled for this day.')
+          else
+            ...dayCourses.map(_buildCourseCard),
+        ],
+      ),
+    );
+  }
+
+  // ── By Trainer View ───────────────────────────────────────────────────────
+
+  Widget _buildByTrainerView() {
+    final trainerNames = <String, String>{
+      for (final t in _trainers) t.id: t.displayName ?? t.email,
+    };
+
+    final grouped = <String, List<Course>>{};
+    for (final c in _allCourses) {
+      grouped.putIfAbsent(c.trainerId, () => []).add(c);
+    }
+    for (final list in grouped.values) {
+      list.sort((a, b) => a.startDate.compareTo(b.startDate));
+    }
+
+    final sortedIds = grouped.keys.toList()
+      ..sort((a, b) {
+        final nameA = trainerNames[a] ?? '';
+        final nameB = trainerNames[b] ?? '';
+        if (nameA.isEmpty && nameB.isNotEmpty) return 1;
+        if (nameA.isNotEmpty && nameB.isEmpty) return -1;
+        return nameA.compareTo(nameB);
+      });
+
+    if (sortedIds.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            'No courses found.',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: sortedIds.length,
+      itemBuilder: (context, i) {
+        final trainerId = sortedIds[i];
+        final name = trainerNames[trainerId];
+        final trainerCourses = grouped[trainerId]!;
+        final initials = name != null && name.isNotEmpty
+            ? name
+                .trim()
+                .split(RegExp(r'\s+'))
+                .take(2)
+                .map((s) => s[0].toUpperCase())
+                .join()
+            : '?';
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (i > 0) const SizedBox(height: 20),
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                  radius: 16,
+                  child: Text(
+                    initials,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    name ?? 'Unknown Trainer',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF111111),
+                    ),
+                  ),
+                ),
+                Text(
+                  '${trainerCourses.length} course${trainerCourses.length == 1 ? '' : 's'}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ...trainerCourses.map(_buildCourseCard),
+          ],
+        );
+      },
     );
   }
 

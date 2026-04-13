@@ -2,12 +2,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../services/client_invites_service.dart';
+import '../services/trainer_invites_service.dart';
 
 typedef UserRole =
     String; // 'training_company' | 'freelance_trainer' | 'client'
 
 class AuthProvider extends ChangeNotifier {
   final _invitesService = ClientInvitesService();
+  final _trainerInvitesService = TrainerInvitesService();
   User? _user;
   UserRole? _role;
   String? _trainingCompanyId;
@@ -83,6 +85,20 @@ class AuthProvider extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// Called when a trainer explicitly accepts a company invite.
+  Future<void> acceptTrainerInvite(String inviteId, String companyId) async {
+    final uid = _user?.uid;
+    if (uid == null) return;
+    await _trainerInvitesService.acceptInvite(inviteId, uid);
+    final now = DateTime.now().toUtc().toIso8601String();
+    await FirebaseFirestore.instance.collection('users').doc(uid).set({
+      'companyId': companyId,
+      'updatedAt': now,
+    }, SetOptions(merge: true));
+    _trainingCompanyId = companyId;
+    notifyListeners();
+  }
+
   Future<UserRole?> _fetchRole(String uid) async {
     try {
       final doc = await FirebaseFirestore.instance
@@ -152,7 +168,7 @@ class AuthProvider extends ChangeNotifier {
       } catch (e) {
         debugPrint('[AuthProvider] Failed querying ownerId: $e');
       }
-    } else if (role == 'client') {
+    } else if (role == 'client' || role == 'freelance_trainer') {
       try {
         final userDoc = await FirebaseFirestore.instance
             .collection('users')
@@ -163,7 +179,7 @@ class AuthProvider extends ChangeNotifier {
           return companyId;
         }
       } catch (e) {
-        debugPrint('[AuthProvider] Failed reading client companyId: $e');
+        debugPrint('[AuthProvider] Failed reading $role companyId: $e');
       }
     }
     return null;

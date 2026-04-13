@@ -138,6 +138,50 @@ service cloud.firestore {
         isCompanyAdmin(resource.data.companyId);
     }
 
+    // Trainer invites: created by company admins, claimed by invited trainer account
+    match /trainer_invites/{inviteId} {
+      allow get: if isAuth() && (
+        isCompanyAdmin(resource.data.companyId) ||
+        getUserRole() == 'freelance_trainer'
+      );
+      allow list: if isAuth() && (
+        getUserRole() == 'training_company' ||
+        getUserRole() == 'freelance_trainer'
+      );
+
+      allow create: if isAuth() &&
+        getUserRole() == 'training_company' &&
+        request.resource.data.companyId is string &&
+        isCompanyAdmin(request.resource.data.companyId) &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.email is string &&
+        request.resource.data.email.size() > 3;
+
+      allow update: if isAuth() && (
+        // Company admin can maintain pending invites for their company
+        (
+          getUserRole() == 'training_company' &&
+          resource.data.companyId is string &&
+          isCompanyAdmin(resource.data.companyId)
+        ) ||
+        // Trainer can accept (claim) or decline a pending invite
+        (
+          getUserRole() == 'freelance_trainer' &&
+          resource.data.status == 'pending' &&
+          (request.resource.data.status == 'claimed' || request.resource.data.status == 'declined') &&
+          request.resource.data.companyId == resource.data.companyId &&
+          request.resource.data.email == resource.data.email &&
+          (request.resource.data.status == 'declined' ||
+            request.resource.data.claimedByUid == request.auth.uid)
+        )
+      );
+
+      allow delete: if isAuth() &&
+        getUserRole() == 'training_company' &&
+        resource.data.companyId is string &&
+        isCompanyAdmin(resource.data.companyId);
+    }
+
     // Courses: company admins, assigned trainer, or client
     match /courses/{courseId} {
       allow read: if isAuth() && (
@@ -146,7 +190,17 @@ service cloud.firestore {
         request.auth.uid == resource.data.clientId
       );
       allow create: if isAuth() && isCompanyAdmin(request.resource.data.trainingCompanyId);
-      allow update, delete: if isAuth() && isCompanyAdmin(resource.data.trainingCompanyId);
+      allow update: if isAuth() && (
+        isCompanyAdmin(resource.data.trainingCompanyId) ||
+        // Trainer can accept or decline a job assigned to them
+        (
+          request.auth.uid == resource.data.trainerId &&
+          resource.data.status == 'pending_trainer' &&
+          (request.resource.data.status == 'confirmed' || request.resource.data.status == 'trainer_declined') &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+        )
+      );
+      allow delete: if isAuth() && isCompanyAdmin(resource.data.trainingCompanyId);
     }
 
     // Venues: company admins, linked clients, or client-owned
@@ -177,6 +231,28 @@ service cloud.firestore {
       );
       allow create: if isAuth();
       allow update, delete: if isAuth() && request.auth.uid == resource.data.ownerId;
+    }
+
+    // Trainer profiles: trainer owns, training companies can read
+    match /trainer_profiles/{trainerId} {
+      allow read: if isAuth() && (
+        request.auth.uid == trainerId ||
+        getUserRole() == 'training_company'
+      );
+      allow write: if isAuth() && request.auth.uid == trainerId;
+    }
+
+    // Trainer rates: company admins set rates per trainer
+    match /trainer_rates/{rateId} {
+      allow read: if isAuth() && (
+        isCompanyAdmin(resource.data.companyId) ||
+        request.auth.uid == resource.data.trainerId
+      );
+      allow create: if isAuth() &&
+        isCompanyAdmin(request.resource.data.companyId);
+      allow update: if isAuth() &&
+        isCompanyAdmin(resource.data.companyId);
+      allow delete: if false;
     }
 
     // Audit log: read-only for company admins, write via backend/Cloud Functions

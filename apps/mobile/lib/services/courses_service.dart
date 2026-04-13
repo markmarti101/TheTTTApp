@@ -50,5 +50,36 @@ class CoursesService {
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
     });
   }
+
+  Future<List<Course>> getCoursesByTrainer(String trainerId) async {
+    final snap = await _firestore
+        .collection('courses')
+        .where('trainerId', isEqualTo: trainerId)
+        .get();
+    return snap.docs
+        .map((d) => Course.fromFirestore(d.id, d.data()))
+        .toList();
+  }
+
+  Future<void> acceptJob(String courseId) async {
+    await _firestore.collection('courses').doc(courseId).update({
+      'status': 'confirmed',
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  Future<void> declineJob(String courseId) async {
+    await _firestore.collection('courses').doc(courseId).update({
+      'status': 'trainer_declined',
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  Future<void> updatePoNumber(String courseId, String poNumber) async {
+    await _firestore.collection('courses').doc(courseId).update({
+      'poNumber': poNumber,
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
 }
 

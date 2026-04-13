@@ -12,6 +12,7 @@ class Course {
   final String status;
   final List<String>? delegateIds;
   final String? notes;
+  final String? poNumber;
   final String createdAt;
   final String updatedAt;
 
@@ -29,6 +30,7 @@ class Course {
     required this.status,
     this.delegateIds,
     this.notes,
+    this.poNumber,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -50,6 +52,7 @@ class Course {
           ?.map((e) => e.toString())
           .toList(),
       notes: data['notes'] as String?,
+      poNumber: data['poNumber'] as String?,
       createdAt: data['createdAt'] as String? ?? '',
       updatedAt: data['updatedAt'] as String? ?? '',
     );

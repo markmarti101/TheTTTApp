@@ -129,7 +129,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final now = DateTime.now();
     final thirtyDaysAgo = now.subtract(const Duration(days: 30));
     final upcoming = _courses
-        .where((c) => c.startDate.isAfter(thirtyDaysAgo))
+        .where((c) =>
+            c.startDate.isAfter(thirtyDaysAgo) &&
+            c.status != 'completed' &&
+            c.status != 'declined' &&
+            c.status != 'trainer_declined')
         .toList()
       ..sort((a, b) => a.startDate.compareTo(b.startDate));
     final pastCount =
@@ -443,6 +447,7 @@ class _HomeTab extends StatelessWidget {
           ...upcoming.take(3).map((c) => _CourseCard(
                 course: c,
                 venueName: venueNames[c.venueId ?? ''],
+                onReturn: onRefresh,
               )),
         ],
         if (activeRequests.isNotEmpty) ...[
@@ -1209,10 +1214,10 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
                                 final statusLabel =
                                     isPending ? 'Pending' : 'Confirmed';
                                 final statusColor = isPending
-                                    ? const Color(0xFFB45309)
+                                    ? AppColors.primary
                                     : const Color(0xFF1B6B4A);
                                 final statusBg = isPending
-                                    ? const Color(0xFFFFF4E0)
+                                    ? AppColors.primary.withValues(alpha: 0.1)
                                     : const Color(0xFFE8F7F2);
 
                                 return Container(
@@ -1238,7 +1243,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
                                         height: 74,
                                         decoration: BoxDecoration(
                                           color: isPending
-                                              ? const Color(0xFFE67E22)
+                                              ? AppColors.primary
                                               : AppColors.primary,
                                           borderRadius:
                                               const BorderRadius.only(
@@ -1260,8 +1265,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
                                               fontSize: 20,
                                               fontWeight: FontWeight.w800,
                                               color: isPending
-                                                  ? const Color(
-                                                      0xFFE67E22)
+                                                  ? AppColors.primary
                                                   : AppColors.primary,
                                             ),
                                           ),
@@ -2113,7 +2117,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
         ],
         if (_invitations.isNotEmpty) ...[
           _sectionHeader('JOB INVITATIONS', _invitations.length,
-              const Color(0xFFE67E22)),
+              AppColors.primary),
           const SizedBox(height: 10),
           ..._invitations.map(_buildInvitationCard),
           const SizedBox(height: 20),
@@ -2163,7 +2167,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.business_outlined,
-                      size: 20, color: Color(0xFF7C3AED)),
+                      size: 20, color: AppColors.primary),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -2175,7 +2179,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF7C3AED),
+                          color: AppColors.primary,
                           letterSpacing: 0.5,
                         ),
                       ),
@@ -2335,7 +2339,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE8B84B), width: 1.2),
+        border: Border.all(color: AppColors.primary, width: 1.2),
         boxShadow: [
           BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
@@ -2346,16 +2350,6 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            height: 3,
-            decoration: const BoxDecoration(
-              color: Color(0xFFE67E22),
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-              ),
-            ),
-          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
             child: Column(
@@ -2379,7 +2373,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFFF4E0),
+                        color: AppColors.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Text(
@@ -2387,7 +2381,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFFB45309),
+                          color: AppColors.primary,
                         ),
                       ),
                     ),
@@ -2429,9 +2423,9 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
                         child: OutlinedButton(
                           onPressed: () => _decline(course.id),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFFE53935),
+                            foregroundColor: AppColors.primary,
                             side: const BorderSide(
-                                color: Color(0xFFE53935)),
+                                color: AppColors.primary),
                             padding: const EdgeInsets.symmetric(
                                 vertical: 10),
                             shape: RoundedRectangleBorder(
@@ -2805,7 +2799,8 @@ class _SectionHeader extends StatelessWidget {
 class _CourseCard extends StatelessWidget {
   final Course course;
   final String? venueName;
-  const _CourseCard({required this.course, this.venueName});
+  final VoidCallback? onReturn;
+  const _CourseCard({required this.course, this.venueName, this.onReturn});
 
   @override
   Widget build(BuildContext context) {
@@ -2819,15 +2814,18 @@ class _CourseCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       child: GestureDetector(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ClientCourseDetailScreen(
-              course: course,
-              venueName: venueName,
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ClientCourseDetailScreen(
+                course: course,
+                venueName: venueName,
+              ),
             ),
-          ),
-        ),
+          );
+          onReturn?.call();
+        },
         child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(

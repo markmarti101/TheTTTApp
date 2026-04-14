@@ -5,6 +5,7 @@ import '../core/theme.dart';
 import '../providers/auth_provider.dart';
 import '../services/company_directory_service.dart';
 import 'add_client_screen.dart';
+import 'client_detail_screen.dart';
 
 class CompanyClientsScreen extends StatefulWidget {
   const CompanyClientsScreen({super.key});
@@ -106,21 +107,79 @@ class _CompanyClientsScreenState extends State<CompanyClientsScreen> {
                     itemBuilder: (context, index) {
                       final c = _clients[index];
                       final name = c.displayName ?? c.email.split('@').first;
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          title: Text(
-                            name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.text,
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ClientDetailScreen(
+                                clientId: c.id,
+                                clientName: name,
+                                clientEmail: c.email,
+                              ),
                             ),
                           ),
-                          subtitle: Text(
-                            c.email,
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 13,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 12),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 22,
+                                  backgroundColor: AppColors.primary
+                                      .withValues(alpha: 0.12),
+                                  child: Text(
+                                    name.isNotEmpty
+                                        ? name[0].toUpperCase()
+                                        : '?',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 16,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 14,
+                                          color: AppColors.text,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        c.email,
+                                        style: TextStyle(
+                                          color: AppColors.textSecondary,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(Icons.chevron_right_rounded,
+                                    color: Color(0xFFCBD5E1), size: 20),
+                              ],
                             ),
                           ),
                         ),

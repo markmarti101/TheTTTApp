@@ -6,6 +6,7 @@ import '../core/theme.dart';
 import '../models/course.dart';
 import '../models/venue.dart';
 import '../providers/auth_provider.dart';
+import '../services/courses_service.dart';
 
 class ClientCourseDetailScreen extends StatefulWidget {
   final Course course;
@@ -26,6 +27,11 @@ class _ClientCourseDetailScreenState extends State<ClientCourseDetailScreen> {
   bool _loading = true;
   String? _trainerDisplay;
   Venue? _venue;
+
+  // PO Number state
+  String? _poNumber;
+  bool _settingPoNumber = false;
+  final _coursesService = CoursesService();
 
   // Feedback state
   Map<String, dynamic>? _existingFeedback;
@@ -102,6 +108,7 @@ class _ClientCourseDetailScreenState extends State<ClientCourseDetailScreen> {
           _trainerDisplay = trainerDisplay;
           _venue = venue;
           _existingFeedback = existingFeedback;
+          _poNumber = widget.course.poNumber;
           _loading = false;
         });
       }
@@ -255,6 +262,8 @@ class _ClientCourseDetailScreenState extends State<ClientCourseDetailScreen> {
           _buildTrainerCard(),
           const SizedBox(height: 12),
           _buildVenueCard(),
+          const SizedBox(height: 12),
+          _buildPONumberCard(),
           if (course.notes != null && course.notes!.isNotEmpty) ...[
             const SizedBox(height: 12),
             _buildNotesCard(course.notes!),
@@ -448,6 +457,88 @@ class _ClientCourseDetailScreenState extends State<ClientCourseDetailScreen> {
           _submitFeedback(rating, comment);
         },
       ),
+    );
+  }
+
+  // ── PO Number ────────────────────────────────────────────────────────────────
+
+  Future<void> _showSetPoNumberDialog() async {
+    final controller = TextEditingController(text: _poNumber ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('PO Number'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'e.g. PO-2026-001',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    setState(() => _settingPoNumber = true);
+    try {
+      await _coursesService.updatePoNumber(widget.course.id, result);
+      if (mounted) setState(() => _poNumber = result);
+    } finally {
+      if (mounted) setState(() => _settingPoNumber = false);
+    }
+  }
+
+  Widget _buildPONumberCard() {
+    final hasPoNumber = _poNumber != null && _poNumber!.isNotEmpty;
+    return _InfoCard(
+      title: 'PO Number',
+      trailing: _settingPoNumber
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppColors.primary))
+          : TextButton(
+              onPressed: _showSetPoNumberDialog,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              ),
+              child: Text(
+                hasPoNumber ? 'Edit' : 'Set',
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w700),
+              ),
+            ),
+      children: [
+        hasPoNumber
+            ? _InfoRow(
+                icon: Icons.confirmation_number_outlined,
+                label: 'PO No.',
+                value: _poNumber!,
+              )
+            : const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  'No PO number assigned yet.',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+                ),
+              ),
+      ],
     );
   }
 
@@ -1007,7 +1098,8 @@ class _FeedbackSheetState extends State<_FeedbackSheet> {
 class _InfoCard extends StatelessWidget {
   final String title;
   final List<Widget> children;
-  const _InfoCard({required this.title, required this.children});
+  final Widget? trailing;
+  const _InfoCard({required this.title, required this.children, this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -1028,14 +1120,21 @@ class _InfoCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF111111),
-              ),
+            padding: const EdgeInsets.fromLTRB(16, 14, 8, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF111111),
+                    ),
+                  ),
+                ),
+                ?trailing,
+              ],
             ),
           ),
           const SizedBox(height: 10),

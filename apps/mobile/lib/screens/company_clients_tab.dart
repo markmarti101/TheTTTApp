@@ -5,7 +5,7 @@ import '../core/theme.dart';
 import '../providers/auth_provider.dart';
 import '../services/company_directory_service.dart';
 import 'add_client_screen.dart';
-import 'edit_client_screen.dart';
+import 'client_detail_screen.dart';
 
 class CompanyClientsTab extends StatefulWidget {
   const CompanyClientsTab({super.key});
@@ -266,8 +266,12 @@ class _CompanyClientsTabState extends State<CompanyClientsTab> {
             await Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) =>
-                    EditClientScreen(clientId: _filtered[i].id),
+                builder: (_) => ClientDetailScreen(
+                  clientId: _filtered[i].id,
+                  clientName: _filtered[i].displayName ??
+                      _filtered[i].email.split('@').first,
+                  clientEmail: _filtered[i].email,
+                ),
               ),
             );
             _load();

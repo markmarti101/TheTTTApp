@@ -746,7 +746,10 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
       final endOfWindow = startOfToday.add(const Duration(days: 7));
       return !course.startDate.isBefore(startOfToday) &&
           course.startDate.isBefore(endOfWindow) &&
-          course.endDate.isAfter(DateTime.now());
+          course.endDate.isAfter(DateTime.now()) &&
+          course.status != 'completed' &&
+          course.status != 'declined' &&
+          course.status != 'trainer_declined';
     }).toList()..sort((a, b) => a.startDate.compareTo(b.startDate));
 
     final now = DateTime.now();
@@ -1180,14 +1183,15 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
                 color: Colors.transparent,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(10),
-                  onTap: () {
-                    Navigator.push(
+                  onTap: () async {
+                    await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) =>
                             CompanyCourseDetailScreen(courseId: course.id),
                       ),
                     );
+                    if (mounted) _loadMonthData();
                   },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -1901,12 +1905,15 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
         '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
 
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => CompanyCourseDetailScreen(courseId: course.id),
-        ),
-      ),
+      onTap: () async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CompanyCourseDetailScreen(courseId: course.id),
+          ),
+        );
+        if (mounted) _loadMonthData();
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         decoration: BoxDecoration(

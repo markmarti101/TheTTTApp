@@ -230,7 +230,6 @@ class _CompanyCourseDetailScreenState
         ],
       ),
     );
-    controller.dispose();
     if (result == null) return;
     setState(() => _settingPoNumber = true);
     try {

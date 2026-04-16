@@ -228,6 +228,13 @@ service cloud.firestore {
       allow read, update, delete: if isAuth() && isCompanyAdmin(resource.data.trainingCompanyId);
     }
 
+    // Resource allocations: company admins only
+    match /resource_allocations/{allocationId} {
+      allow create: if isAuth() && isCompanyAdmin(request.resource.data.trainingCompanyId);
+      allow read, delete: if isAuth() && isCompanyAdmin(resource.data.trainingCompanyId);
+      allow update: if false;
+    }
+
     // Documents: owner or related entity access
     match /documents/{docId} {
       allow read: if isAuth() && (

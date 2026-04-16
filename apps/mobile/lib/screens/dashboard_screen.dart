@@ -136,8 +136,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             c.status != 'trainer_declined')
         .toList()
       ..sort((a, b) => a.startDate.compareTo(b.startDate));
-    final pastCount =
-        _courses.where((c) => !c.startDate.isAfter(thirtyDaysAgo)).length;
+    final past = _courses
+        .where((c) => c.status == 'completed')
+        .toList()
+      ..sort((a, b) => b.startDate.compareTo(a.startDate));
+    final pastCount = past.length;
     final activeRequests = _requests
         .where((r) => r.status == 'pending' || r.status == 'reviewed')
         .toList();
@@ -155,6 +158,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _HomeTab(
               auth: auth,
               upcoming: upcoming,
+              past: past,
               pastCount: pastCount,
               activeRequests: activeRequests,
               companyName: _companyName,
@@ -224,6 +228,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 class _HomeTab extends StatelessWidget {
   final AuthProvider auth;
   final List<Course> upcoming;
+  final List<Course> past;
   final int pastCount;
   final List<CourseRequest> activeRequests;
   final String? companyName;
@@ -237,6 +242,7 @@ class _HomeTab extends StatelessWidget {
   const _HomeTab({
     required this.auth,
     required this.upcoming,
+    required this.past,
     required this.pastCount,
     required this.activeRequests,
     required this.companyName,
@@ -458,6 +464,15 @@ class _HomeTab extends StatelessWidget {
           ...activeRequests
               .take(3)
               .map((r) => _RequestCard(request: r)),
+        ],
+        if (past.isNotEmpty) ...[
+          const _SectionHeader(title: 'Past Courses'),
+          ...past.take(5).map((c) => _CourseCard(
+                course: c,
+                venueName: venueNames[c.venueId ?? ''],
+                onReturn: onRefresh,
+                showFeedbackBadge: true,
+              )),
         ],
         _buildQuickActions(context, muted: false),
       ],
@@ -880,6 +895,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
   Map<String, String> _venueNames = {};
   final Set<String> _actionLoading = {};
   List<TrainerQualification> _qualifications = [];
+  ComplianceData _compliance = ComplianceData();
   String? _companyName;
   List<Map<String, dynamic>> _pendingCompanyInvites = [];
   final Set<String> _inviteActionLoading = {};
@@ -931,6 +947,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
 
       final qualifications =
           await _profileService.getQualifications(uid);
+      final compliance = await _profileService.getCompliance(uid);
 
       String? companyName;
       final companyId = widget.auth.trainingCompanyId;
@@ -961,6 +978,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
           _upcoming = upcoming;
           _venueNames = venueNames;
           _qualifications = qualifications;
+          _compliance = compliance;
           _companyName = companyName;
           _pendingCompanyInvites = pendingCompanyInvites;
           _loading = false;
@@ -1603,14 +1621,16 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
             ),
             const SizedBox(height: 16),
             _buildQualificationsSection(),
+            const SizedBox(height: 16),
+            _buildComplianceSection(),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
                 onPressed: () => auth.signOut(),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFE53935),
-                  side: const BorderSide(color: Color(0xFFE53935)),
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
@@ -1789,6 +1809,823 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
         ],
       ),
     );
+  }
+
+  // ── Compliance helpers ────────────────────────────────────────────────────
+
+  bool _isExpired(String? iso) {
+    if (iso == null || iso.isEmpty) return false;
+    final dt = DateTime.tryParse(iso);
+    return dt != null && dt.isBefore(DateTime.now());
+  }
+
+  bool _isExpiringSoon(String? iso) {
+    if (iso == null || iso.isEmpty) return false;
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return false;
+    final now = DateTime.now();
+    return !dt.isBefore(now) && dt.isBefore(now.add(const Duration(days: 60)));
+  }
+
+  /// Returns a warning message if any compliance document is expired/expiring.
+  String? _complianceAlertMessage() {
+    final issues = <String>[];
+    final dbs = _compliance.dbs;
+    final ins = _compliance.insurance;
+    if (dbs == null || (dbs.certificateNumber == null && dbs.expiryDate == null)) {
+      issues.add('DBS not recorded');
+    } else if (_isExpired(dbs.expiryDate)) {
+      issues.add('DBS expired');
+    } else if (_isExpiringSoon(dbs.expiryDate)) {
+      issues.add('DBS expiring soon');
+    }
+    if (ins == null || (ins.provider == null && ins.expiryDate == null)) {
+      issues.add('Insurance not recorded');
+    } else if (_isExpired(ins.expiryDate)) {
+      issues.add('Insurance expired');
+    } else if (_isExpiringSoon(ins.expiryDate)) {
+      issues.add('Insurance expiring soon');
+    }
+    if (issues.isEmpty) return null;
+    return issues.join(' · ');
+  }
+
+  Widget _buildComplianceAlertBanner(String message) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFDE68A)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded,
+              size: 18, color: Color(0xFFD97706)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF92400E),
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => setState(() => _tab = 2),
+            child: const Text(
+              'Update',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFFD97706),
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Compliance section (Profile tab) ────────────────────────────────────
+
+  String _dbsSummary() {
+    final dbs = _compliance.dbs;
+    if (dbs == null) return 'Not recorded';
+    if (dbs.certificateNumber != null && dbs.certificateNumber!.isNotEmpty) {
+      return dbs.certificateNumber!;
+    }
+    return 'Recorded';
+  }
+
+  String _insuranceSummary() {
+    final ins = _compliance.insurance;
+    if (ins == null) return 'Not recorded';
+    if (ins.provider != null && ins.provider!.isNotEmpty) {
+      return ins.provider!;
+    }
+    return 'Recorded';
+  }
+
+  Widget _buildComplianceSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFF0F0F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Compliance',
+            style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF111111)),
+          ),
+          const SizedBox(height: 14),
+          _buildComplianceRow(
+            icon: Icons.security_outlined,
+            label: 'DBS Certificate',
+            summary: _dbsSummary(),
+            expiryDate: _compliance.dbs?.expiryDate,
+            onEdit: _showEditDBSDialog,
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 6),
+            child: Divider(height: 1, color: Color(0xFFF0F0F0)),
+          ),
+          _buildComplianceRow(
+            icon: Icons.policy_outlined,
+            label: 'Insurance',
+            summary: _insuranceSummary(),
+            expiryDate: _compliance.insurance?.expiryDate,
+            onEdit: _showEditInsuranceDialog,
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'CPD Log',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF475569)),
+                ),
+              ),
+              GestureDetector(
+                onTap: _showAddCPDDialog,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    '+ Add',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_compliance.cpd.isEmpty)
+            Text(
+              'No CPD entries yet.',
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            )
+          else
+            ..._compliance.cpd.map(_buildCPDRow),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComplianceRow({
+    required IconData icon,
+    required String label,
+    required String summary,
+    required String? expiryDate,
+    required VoidCallback onEdit,
+  }) {
+    final expired = _isExpired(expiryDate);
+    final soon = _isExpiringSoon(expiryDate);
+    final iconColor = expired
+        ? const Color(0xFFDC2626)
+        : soon
+            ? const Color(0xFFD97706)
+            : AppColors.primary;
+
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: iconColor),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF111111))),
+              const SizedBox(height: 2),
+              Text(summary,
+                  style: TextStyle(
+                      fontSize: 12, color: AppColors.textSecondary)),
+              if (expiryDate != null && expiryDate.isNotEmpty)
+                Text(
+                  '${expired ? 'Expired' : 'Expires'}: ${_fmtDate(expiryDate)}',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: iconColor),
+                ),
+            ],
+          ),
+        ),
+        if (expired)
+          Container(
+            margin: const EdgeInsets.only(right: 6),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEE2E2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text('EXPIRED',
+                style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFFDC2626))),
+          )
+        else if (soon)
+          Container(
+            margin: const EdgeInsets.only(right: 6),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF3C7),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text('SOON',
+                style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFFD97706))),
+          ),
+        GestureDetector(
+          onTap: onEdit,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text(
+              'Edit',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF475569)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCPDRow(CPDEntry entry) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.school_outlined,
+              size: 16, color: AppColors.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(entry.title,
+                    style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF111111))),
+                Row(
+                  children: [
+                    if (entry.provider != null &&
+                        entry.provider!.isNotEmpty)
+                      Text(
+                        entry.provider!,
+                        style: const TextStyle(
+                            fontSize: 11, color: Color(0xFF94A3B8)),
+                      ),
+                    if (entry.provider != null &&
+                        entry.provider!.isNotEmpty)
+                      const Text(' · ',
+                          style: TextStyle(
+                              fontSize: 11, color: Color(0xFF94A3B8))),
+                    Text(
+                      _fmtDate(entry.completedDate),
+                      style: const TextStyle(
+                          fontSize: 11, color: Color(0xFF94A3B8)),
+                    ),
+                    if (entry.hours != null)
+                      Text(
+                        ' · ${entry.hours}h',
+                        style: const TextStyle(
+                            fontSize: 11, color: Color(0xFF94A3B8)),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () async {
+              final uid = widget.auth.user?.uid ?? '';
+              await _profileService.deleteCPDEntry(uid, entry.id);
+              await _load();
+            },
+            child: const Icon(Icons.close,
+                size: 16, color: Color(0xFFCBD5E1)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showEditDBSDialog() async {
+    final uid = widget.auth.user?.uid ?? '';
+    final certCtrl = TextEditingController(
+        text: _compliance.dbs?.certificateNumber ?? '');
+    DateTime? expiryDate = DateTime.tryParse(
+        _compliance.dbs?.expiryDate ?? '');
+
+    final result =
+        await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment:
+                    MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('DBS Certificate',
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800)),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _sheetField(certCtrl, 'Certificate Number',
+                  'e.g. 001234567890'),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: expiryDate ??
+                        DateTime.now()
+                            .add(const Duration(days: 365)),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2040),
+                    builder: (c, child) => Theme(
+                      data: ThemeData.light().copyWith(
+                        colorScheme: const ColorScheme.light(
+                            primary: AppColors.primary),
+                      ),
+                      child: child!,
+                    ),
+                  );
+                  if (picked != null) {
+                    setSheetState(() => expiryDate = picked);
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today_outlined,
+                          size: 18, color: Color(0xFF94A3B8)),
+                      const SizedBox(width: 10),
+                      Text(
+                        expiryDate != null
+                            ? 'Expires: ${_fmtDate(expiryDate!.toIso8601String())}'
+                            : 'Select expiry date',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: expiryDate != null
+                              ? const Color(0xFF1E293B)
+                              : const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx, {
+                      'cert': certCtrl.text.trim(),
+                      'expiry': expiryDate
+                              ?.toIso8601String()
+                              .substring(0, 10) ??
+                          '',
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(14)),
+                  ),
+                  child: const Text('Save',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (result == null) return;
+    try {
+      await _profileService.setDBS(
+          uid,
+          DBSRecord(
+            certificateNumber: result['cert'] as String?,
+            expiryDate: result['expiry'] as String?,
+          ));
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('DBS details saved.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save DBS: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showEditInsuranceDialog() async {
+    final uid = widget.auth.user?.uid ?? '';
+    final providerCtrl = TextEditingController(
+        text: _compliance.insurance?.provider ?? '');
+    final policyCtrl = TextEditingController(
+        text: _compliance.insurance?.policyNumber ?? '');
+    DateTime? expiryDate = DateTime.tryParse(
+        _compliance.insurance?.expiryDate ?? '');
+
+    final result =
+        await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment:
+                    MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Insurance',
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800)),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _sheetField(providerCtrl, 'Insurance Provider',
+                  'e.g. Hiscox'),
+              const SizedBox(height: 12),
+              _sheetField(policyCtrl, 'Policy Number',
+                  'e.g. POL-001234'),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: expiryDate ??
+                        DateTime.now()
+                            .add(const Duration(days: 365)),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2040),
+                    builder: (c, child) => Theme(
+                      data: ThemeData.light().copyWith(
+                        colorScheme: const ColorScheme.light(
+                            primary: AppColors.primary),
+                      ),
+                      child: child!,
+                    ),
+                  );
+                  if (picked != null) {
+                    setSheetState(() => expiryDate = picked);
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today_outlined,
+                          size: 18, color: Color(0xFF94A3B8)),
+                      const SizedBox(width: 10),
+                      Text(
+                        expiryDate != null
+                            ? 'Expires: ${_fmtDate(expiryDate!.toIso8601String())}'
+                            : 'Select expiry date',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: expiryDate != null
+                              ? const Color(0xFF1E293B)
+                              : const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx, {
+                      'provider': providerCtrl.text.trim(),
+                      'policy': policyCtrl.text.trim(),
+                      'expiry': expiryDate
+                              ?.toIso8601String()
+                              .substring(0, 10) ??
+                          '',
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(14)),
+                  ),
+                  child: const Text('Save',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (result == null) return;
+    try {
+      await _profileService.setInsurance(
+          uid,
+          InsuranceRecord(
+            provider: (result['provider'] as String?)?.isEmpty ?? true
+                ? null
+                : result['provider'] as String,
+            policyNumber: (result['policy'] as String?)?.isEmpty ?? true
+                ? null
+                : result['policy'] as String,
+            expiryDate: (result['expiry'] as String?)?.isEmpty ?? true
+                ? null
+                : result['expiry'] as String,
+          ));
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Insurance details saved.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save insurance: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showAddCPDDialog() async {
+    final uid = widget.auth.user?.uid ?? '';
+    final titleCtrl = TextEditingController();
+    final providerCtrl = TextEditingController();
+    final hoursCtrl = TextEditingController();
+    DateTime? completedDate;
+
+    final result =
+        await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment:
+                    MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Add CPD Entry',
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800)),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _sheetField(titleCtrl, 'Activity Title',
+                  'e.g. Safeguarding Level 2'),
+              const SizedBox(height: 12),
+              _sheetField(providerCtrl, 'Provider (optional)',
+                  'e.g. NSPCC'),
+              const SizedBox(height: 12),
+              _sheetField(hoursCtrl, 'Hours (optional)',
+                  'e.g. 6'),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime.now(),
+                    builder: (c, child) => Theme(
+                      data: ThemeData.light().copyWith(
+                        colorScheme: const ColorScheme.light(
+                            primary: AppColors.primary),
+                      ),
+                      child: child!,
+                    ),
+                  );
+                  if (picked != null) {
+                    setSheetState(() => completedDate = picked);
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today_outlined,
+                          size: 18, color: Color(0xFF94A3B8)),
+                      const SizedBox(width: 10),
+                      Text(
+                        completedDate != null
+                            ? 'Completed: ${_fmtDate(completedDate!.toIso8601String())}'
+                            : 'Select completion date',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: completedDate != null
+                              ? const Color(0xFF1E293B)
+                              : const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    final title = titleCtrl.text.trim();
+                    if (title.isEmpty || completedDate == null) return;
+                    Navigator.pop(ctx, {
+                      'title': title,
+                      'provider': providerCtrl.text.trim(),
+                      'hours': hoursCtrl.text.trim(),
+                      'completed': completedDate!
+                          .toIso8601String()
+                          .substring(0, 10),
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(14)),
+                  ),
+                  child: const Text('Add Entry',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (result == null) return;
+    final hours = double.tryParse(result['hours'] as String? ?? '');
+    final entry = CPDEntry(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: result['title'] as String,
+      provider: (result['provider'] as String?)?.isEmpty ?? true
+          ? null
+          : result['provider'] as String,
+      completedDate: result['completed'] as String,
+      hours: hours,
+    );
+    await _profileService.addCPDEntry(uid, entry);
+    await _load();
   }
 
   Future<void> _showAddQualificationSheet() async {
@@ -2108,6 +2945,10 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
       children: [
+        if (_complianceAlertMessage() != null) ...[
+          _buildComplianceAlertBanner(_complianceAlertMessage()!),
+          const SizedBox(height: 12),
+        ],
         if (_pendingCompanyInvites.isNotEmpty) ...[
           _sectionHeader('COMPANY INVITATIONS',
               _pendingCompanyInvites.length, AppColors.primary),
@@ -2704,8 +3545,8 @@ class _ProfileTab extends StatelessWidget {
                 icon: const Icon(Icons.logout),
                 label: const Text('Sign Out'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red.shade600,
-                  side: BorderSide(color: Colors.red.shade200),
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
               ),
@@ -2800,7 +3641,13 @@ class _CourseCard extends StatelessWidget {
   final Course course;
   final String? venueName;
   final VoidCallback? onReturn;
-  const _CourseCard({required this.course, this.venueName, this.onReturn});
+  final bool showFeedbackBadge;
+  const _CourseCard({
+    required this.course,
+    this.venueName,
+    this.onReturn,
+    this.showFeedbackBadge = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2810,6 +3657,14 @@ class _CourseCard extends StatelessWidget {
       'Jul','Aug','Sep','Oct','Nov','Dec'
     ];
     final monthStr = monthNames[d.month - 1];
+    final isPast = showFeedbackBadge;
+    final dateColor = isPast ? const Color(0xFF94A3B8) : AppColors.primary;
+    final dateBg = isPast
+        ? const Color(0xFFF1F5F9)
+        : AppColors.primary.withValues(alpha: 0.08);
+    final dateBorder = isPast
+        ? const Color(0xFFE2E8F0)
+        : AppColors.primary.withValues(alpha: 0.2);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
@@ -2844,10 +3699,9 @@ class _CourseCard extends StatelessWidget {
               width: 48,
               padding: const EdgeInsets.symmetric(vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.08),
+                color: dateBg,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.2)),
+                border: Border.all(color: dateBorder),
               ),
               child: Column(
                 children: [
@@ -2856,7 +3710,7 @@ class _CourseCard extends StatelessWidget {
                     style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
-                        color: AppColors.primary,
+                        color: dateColor,
                         height: 1),
                   ),
                   Text(
@@ -2864,7 +3718,7 @@ class _CourseCard extends StatelessWidget {
                     style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.primary),
+                        color: dateColor),
                   ),
                 ],
               ),
@@ -2900,7 +3754,39 @@ class _CourseCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 6),
-                  _StatusChip(status: course.status),
+                  Row(
+                    children: [
+                      _StatusChip(status: course.status),
+                      if (isPast) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(100),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.star_outline_rounded,
+                                  size: 10,
+                                  color: AppColors.primary),
+                              const SizedBox(width: 3),
+                              Text(
+                                'Leave feedback',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             ),

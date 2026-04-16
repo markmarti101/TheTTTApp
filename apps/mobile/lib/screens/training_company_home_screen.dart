@@ -19,6 +19,7 @@ import 'requests_list_screen.dart';
 import 'company_trainers_screen.dart';
 import 'add_client_screen.dart';
 import 'company_venues_screen.dart';
+import 'resources_screen.dart';
 
 enum _CalendarView { month, week, day, byTrainer }
 
@@ -36,7 +37,7 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
   final _directoryService = CompanyDirectoryService();
   final _requestsService = RequestsService();
 
-  int _tabIndex = 0; // 0 Dashboard, 1 Calendar, 2 Requests, 3 People
+  int _tabIndex = 0; // 0 Dashboard, 1 Calendar, 2 Requests, 3 Clients, 4 Resources
 
   late DateTime _focusedMonth;
   late DateTime _selectedDay;
@@ -248,7 +249,9 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
                   ? _buildCalendarTab()
                   : _tabIndex == 2
                   ? const RequestsListScreen(embedded: true)
-                  : const CompanyClientsTab(),
+                  : _tabIndex == 3
+                  ? const CompanyClientsTab()
+                  : ResourcesScreen(companyId: _companyId ?? ''),
             ),
           ],
         ),
@@ -283,6 +286,11 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
             icon: Icon(Icons.groups_outlined),
             activeIcon: Icon(Icons.groups),
             label: 'Clients',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.inventory_2_outlined),
+            activeIcon: Icon(Icons.inventory_2),
+            label: 'Resources',
           ),
         ],
       ),

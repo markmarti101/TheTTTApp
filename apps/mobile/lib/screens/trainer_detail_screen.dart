@@ -26,6 +26,7 @@ class _TrainerDetailScreenState extends State<TrainerDetailScreen> {
 
   bool _loading = true;
   List<TrainerQualification> _qualifications = [];
+  ComplianceData _compliance = ComplianceData();
   TrainerRate? _rate;
   bool _savingRate = false;
 
@@ -53,12 +54,15 @@ class _TrainerDetailScreenState extends State<TrainerDetailScreen> {
       final results = await Future.wait([
         _service.getQualifications(widget.trainerId),
         _service.getTrainerRate(companyId, widget.trainerId),
+        _service.getCompliance(widget.trainerId),
       ]);
       final quals = results[0] as List<TrainerQualification>;
       final rate = results[1] as TrainerRate?;
+      final compliance = results[2] as ComplianceData;
       if (mounted) {
         setState(() {
           _qualifications = quals;
+          _compliance = compliance;
           _rate = rate;
           _dayRateController.text =
               rate?.dayRate != null ? rate!.dayRate!.toStringAsFixed(0) : '';
@@ -142,6 +146,8 @@ class _TrainerDetailScreenState extends State<TrainerDetailScreen> {
                   _buildRateCard(),
                   const SizedBox(height: 16),
                   _buildQualificationsCard(),
+                  const SizedBox(height: 16),
+                  _buildComplianceCard(),
                 ],
               ),
             ),
@@ -393,6 +399,178 @@ class _TrainerDetailScreenState extends State<TrainerDetailScreen> {
       ),
     );
   }
+
+  Widget _buildComplianceCard() {
+    final dbs = _compliance.dbs;
+    final ins = _compliance.insurance;
+    final now = DateTime.now();
+
+    bool isExp(String? iso) {
+      if (iso == null || iso.isEmpty) return false;
+      final dt = DateTime.tryParse(iso);
+      return dt != null && dt.isBefore(now);
+    }
+
+    bool isSoon(String? iso) {
+      if (iso == null || iso.isEmpty) return false;
+      final dt = DateTime.tryParse(iso);
+      if (dt == null) return false;
+      return !dt.isBefore(now) &&
+          dt.isBefore(now.add(const Duration(days: 60)));
+    }
+
+    Color statusColor(String? iso) => isExp(iso)
+        ? const Color(0xFFDC2626)
+        : isSoon(iso)
+            ? const Color(0xFFD97706)
+            : AppColors.primary;
+
+    Widget compRow({
+      required IconData icon,
+      required String label,
+      required String value,
+      required String? expiryDate,
+    }) {
+      final expired = isExp(expiryDate);
+      final soon = isSoon(expiryDate);
+      final color = statusColor(expiryDate);
+      return Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF475569))),
+                Text(value,
+                    style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF111111))),
+                if (expiryDate != null && expiryDate.isNotEmpty)
+                  Text(
+                    '${expired ? 'Expired' : 'Expires'}: ${_formatDate(expiryDate)}',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: color),
+                  ),
+              ],
+            ),
+          ),
+          if (expired)
+            _badge('EXPIRED', const Color(0xFFFEE2E2),
+                const Color(0xFFDC2626))
+          else if (soon)
+            _badge('SOON', const Color(0xFFFEF3C7),
+                const Color(0xFFD97706)),
+        ],
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Compliance',
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF111111),
+                letterSpacing: 0.3),
+          ),
+          const SizedBox(height: 14),
+          compRow(
+            icon: Icons.security_outlined,
+            label: 'DBS Certificate',
+            value: dbs?.certificateNumber?.isNotEmpty == true
+                ? dbs!.certificateNumber!
+                : (dbs != null ? 'Recorded' : 'Not provided'),
+            expiryDate: dbs?.expiryDate,
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: Divider(height: 1, color: Color(0xFFF0F0F0)),
+          ),
+          compRow(
+            icon: Icons.policy_outlined,
+            label: 'Insurance',
+            value: ins?.provider?.isNotEmpty == true
+                ? ins!.provider!
+                : (ins != null ? 'Recorded' : 'Not provided'),
+            expiryDate: ins?.expiryDate,
+          ),
+          if (_compliance.cpd.isNotEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 10),
+              child: Divider(height: 1, color: Color(0xFFF0F0F0)),
+            ),
+            const Text(
+              'CPD Log',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF475569)),
+            ),
+            const SizedBox(height: 8),
+            ..._compliance.cpd.map((e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.school_outlined,
+                          size: 15, color: AppColors.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          e.title +
+                              (e.provider != null
+                                  ? ' · ${e.provider}'
+                                  : '') +
+                              (e.hours != null
+                                  ? ' · ${e.hours}h'
+                                  : ''),
+                          style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF334155)),
+                        ),
+                      ),
+                      Text(
+                        _formatDate(e.completedDate),
+                        style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF94A3B8)),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _badge(String text, Color bg, Color fg) => Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+              fontSize: 9, fontWeight: FontWeight.w800, color: fg),
+        ),
+      );
 
   Widget _buildField({
     required String label,

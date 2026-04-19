@@ -40,4 +40,14 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
   end
+
+  # Fix: DKPhotoGallery/DKImagePickerController asset catalogs break
+  # AssetCatalogSimulatorAgent on newer Xcode. Remove them so they are not compiled.
+  [
+    File.join('Pods', 'DKPhotoGallery', 'DKPhotoGallery', 'Resource', 'Resources', 'Images.xcassets'),
+    File.join('Pods', 'DKImagePickerController', 'Sources', 'DKImagePickerController', 'Resource', 'Resources', 'Images.xcassets'),
+  ].each do |rel|
+    path = File.join(File.dirname(__FILE__), rel)
+    FileUtils.rm_rf(path) if File.exist?(path)
+  end
 end

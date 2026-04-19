@@ -549,7 +549,10 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
   Widget build(BuildContext context) {
     final lowStock = _lowStockResources;
 
-    return Column(
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F6FA),
+      body: SafeArea(
+        child: Column(
       children: [
         _buildHeader(),
         if (!_loading && lowStock.isNotEmpty) _buildShortageBanner(lowStock),
@@ -581,24 +584,41 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
                 ),
         ),
       ],
+        ),
+      ),
     );
   }
 
   Widget _buildHeader() {
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
+      color: const Color(0xFFF5F6FA),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
         children: [
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F6FA),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.arrow_back_ios_new,
+                  size: 16, color: Color(0xFF111111)),
+            ),
+          ),
+          const SizedBox(width: 12),
           const Expanded(
             child: Text(
               'Resources',
               style: TextStyle(
                   fontSize: 20,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: Color(0xFF111111)),
             ),
           ),
+          if (_resources.isNotEmpty)
           GestureDetector(
             onTap: () => _showAddEditSheet(),
             child: Container(
@@ -659,13 +679,12 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
   }
 
   Widget _buildEmptyState() {
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      children: [
-        const SizedBox(height: 80),
-        Center(
-          child: Column(
-            children: [
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
               Container(
                 width: 72,
                 height: 72,
@@ -706,10 +725,9 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
                   ),
                 ),
               ),
-            ],
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

@@ -20,6 +20,8 @@ import 'company_trainers_screen.dart';
 import 'add_client_screen.dart';
 import 'company_venues_screen.dart';
 import 'resources_screen.dart';
+import 'notifications_screen.dart';
+import '../services/notification_service.dart';
 
 enum _CalendarView { month, week, day, byTrainer }
 
@@ -37,7 +39,8 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
   final _directoryService = CompanyDirectoryService();
   final _requestsService = RequestsService();
 
-  int _tabIndex = 0; // 0 Dashboard, 1 Calendar, 2 Requests, 3 Clients, 4 Resources
+  int _tabIndex = 0; // 0 Dashboard, 1 Calendar, 2 Requests, 3 Clients
+  int _unreadNotifCount = 0;
 
   late DateTime _focusedMonth;
   late DateTime _selectedDay;
@@ -82,6 +85,8 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
       _prefetchCompanyName();
       _loadMonthData();
     }
+    final uid = auth.user?.uid;
+    if (uid != null) _loadUnreadNotifCount(uid);
   }
 
   /// Reads registered company title from common Firestore field names.
@@ -120,6 +125,13 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
       if (name != null) {
         setState(() => _companyName = name);
       }
+    } catch (_) {}
+  }
+
+  Future<void> _loadUnreadNotifCount(String uid) async {
+    try {
+      final count = await NotificationService().getUnreadCount(uid);
+      if (mounted) setState(() => _unreadNotifCount = count);
     } catch (_) {}
   }
 
@@ -249,9 +261,7 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
                   ? _buildCalendarTab()
                   : _tabIndex == 2
                   ? const RequestsListScreen(embedded: true)
-                  : _tabIndex == 3
-                  ? const CompanyClientsTab()
-                  : ResourcesScreen(companyId: _companyId ?? ''),
+                  : const CompanyClientsTab(),
             ),
           ],
         ),
@@ -287,11 +297,6 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
             activeIcon: Icon(Icons.groups),
             label: 'Clients',
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.inventory_2_outlined),
-            activeIcon: Icon(Icons.inventory_2),
-            label: 'Resources',
-          ),
         ],
       ),
     );
@@ -312,6 +317,8 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
             ),
           ),
           Expanded(child: _buildHeaderBarCompanyTitle()),
+          _buildNotifBell(auth),
+          const SizedBox(width: 8),
           _userInitialsAvatar(auth),
         ],
       ),
@@ -445,6 +452,51 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
       return '${local[0]}${local[0]}'.toUpperCase();
     }
     return '?';
+  }
+
+  Widget _buildNotifBell(AuthProvider auth) {
+    return GestureDetector(
+      onTap: () async {
+        final uid = auth.user?.uid ?? '';
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => NotificationsScreen(userId: uid),
+          ),
+        );
+        _loadUnreadNotifCount(uid);
+      },
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Icon(Icons.notifications_outlined,
+              size: 24, color: Color(0xFF475569)),
+          if (_unreadNotifCount > 0)
+            Positioned(
+              right: -4,
+              top: -4,
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFDC2626),
+                  shape: BoxShape.circle,
+                ),
+                constraints:
+                    const BoxConstraints(minWidth: 16, minHeight: 16),
+                child: Text(
+                  _unreadNotifCount > 99 ? '99+' : '$_unreadNotifCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _userInitialsAvatar(AuthProvider auth) {
@@ -596,7 +648,13 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
               ],
             ),
           ),
-          _userInitialsAvatar(auth),
+          Row(
+            children: [
+              _buildNotifBell(auth),
+              const SizedBox(width: 8),
+              _userInitialsAvatar(auth),
+            ],
+          ),
         ],
       ),
     );
@@ -613,18 +671,6 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
               alignment: Alignment.bottomLeft,
               child: _buildDrawerCompanyTitle(),
             ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.list_alt_outlined),
-            title: const Text('Course Requests'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const RequestsListScreen(),
-                ),
-              );
-            },
           ),
           ListTile(
             leading: const Icon(Icons.badge_outlined),
@@ -646,6 +692,19 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => const CompanyVenuesScreen(),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.inventory_2_outlined),
+            title: const Text('Resources'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      ResourcesScreen(companyId: _companyId ?? ''),
                 ),
               );
             },

@@ -1,11 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/course_request.dart';
+import 'notification_service.dart';
 
 class RequestsService {
   static const _requests = 'course_requests';
   static const _courses = 'courses';
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final _notifs = NotificationService();
 
   Future<List<CourseRequest>> getRequestsByCompany(String trainingCompanyId) async {
     final snap = await _firestore
@@ -26,6 +28,12 @@ class RequestsService {
     String? topic,
     String? preferredDateIso,
     String? notes,
+    int? delegateCount,
+    String? poNumber,
+    String? venuePreference,
+    String? venueSetup,
+    String? cateringNotes,
+    String? accessibilityNotes,
   }) async {
     final now = DateTime.now().toUtc().toIso8601String();
     await _firestore.collection(_requests).add({
@@ -36,10 +44,30 @@ class RequestsService {
       'preferredDates':
           preferredDateIso != null && preferredDateIso.isNotEmpty ? [preferredDateIso] : null,
       'notes': notes,
+      if (delegateCount != null) 'delegateCount': delegateCount,
+      if (poNumber != null && poNumber.isNotEmpty) 'poNumber': poNumber,
+      if (venuePreference != null && venuePreference.isNotEmpty)
+        'venuePreference': venuePreference,
+      if (venueSetup != null) 'venueSetup': venueSetup,
+      if (cateringNotes != null && cateringNotes.isNotEmpty)
+        'cateringNotes': cateringNotes,
+      if (accessibilityNotes != null && accessibilityNotes.isNotEmpty)
+        'accessibilityNotes': accessibilityNotes,
       'status': 'pending',
       'createdAt': now,
       'updatedAt': now,
     });
+
+    // Notify training company owner
+    final ownerId = await _notifs.getCompanyOwnerId(trainingCompanyId);
+    if (ownerId != null) {
+      await _notifs.send(
+        recipientId: ownerId,
+        title: 'New course request',
+        body: '"$title" has been requested and is awaiting review.',
+        type: 'request_submitted',
+      );
+    }
   }
 
   Future<List<CourseRequest>> getRequestsByClient(String clientId) async {
@@ -71,21 +99,31 @@ class RequestsService {
   }
 
   Future<void> declineRequest(String id, String reason) async {
+    final req = await getRequest(id);
     await _firestore.collection(_requests).doc(id).update({
       'status': 'declined',
       'declineReason': reason,
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
     });
+
+    // Notify client
+    if (req != null) {
+      await _notifs.send(
+        recipientId: req.clientId,
+        title: 'Request declined',
+        body: '"${req.title}" has been declined. Reason: $reason',
+        type: 'request_declined',
+        relatedId: id,
+      );
+    }
   }
 
   Future<String> approveRequest(
     String requestId,
     String trainerId,
-    DateTime scheduledAt,
-    {
+    DateTime scheduledAt, {
     String? venueId,
-    }
-  ) async {
+  }) async {
     final req = await getRequest(requestId);
     if (req == null) throw Exception('Request not found');
     if (req.status != 'pending' && req.status != 'reviewed') {
@@ -115,6 +153,24 @@ class RequestsService {
       'status': 'approved',
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
     });
+
+    // Notify client
+    await _notifs.send(
+      recipientId: req.clientId,
+      title: 'Request approved',
+      body: '"${req.title}" has been approved and a course has been scheduled.',
+      type: 'request_approved',
+      relatedId: courseRef.id,
+    );
+
+    // Notify trainer
+    await _notifs.send(
+      recipientId: trainerId,
+      title: 'New job assigned',
+      body: 'You\'ve been assigned to deliver "${req.title}". Please accept or decline.',
+      type: 'course_assigned',
+      relatedId: courseRef.id,
+    );
 
     return courseRef.id;
   }

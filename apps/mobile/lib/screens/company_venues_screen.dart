@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/theme.dart';
 import '../models/venue.dart';
@@ -298,6 +299,14 @@ class _VenueCard extends StatelessWidget {
 
   const _VenueCard({required this.venue, required this.onDelete});
 
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -317,7 +326,6 @@ class _VenueCard extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         child: Row(
           children: [
-            // Icon
             Container(
               width: 46,
               height: 46,
@@ -329,7 +337,6 @@ class _VenueCard extends StatelessWidget {
                   color: AppColors.primary, size: 22),
             ),
             const SizedBox(width: 12),
-            // Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -351,38 +358,37 @@ class _VenueCard extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  if (venue.capacity != null) ...[
+                  if (venue.capacity != null || venue.detailsDocumentUrl != null) ...[
                     const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF0FDF4),
-                        borderRadius: BorderRadius.circular(100),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.people_outline,
-                              size: 11,
-                              color: Color(0xFF059669)),
-                          const SizedBox(width: 3),
-                          Text(
-                            'Capacity: ${venue.capacity}',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF059669),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        if (venue.capacity != null)
+                          _badge(
+                            icon: Icons.people_outline,
+                            label: 'Capacity: ${venue.capacity}',
+                            bgColor: const Color(0xFFF0FDF4),
+                            fgColor: const Color(0xFF059669),
+                          ),
+                        if (venue.detailsDocumentUrl != null &&
+                            venue.detailsDocumentUrl!.isNotEmpty)
+                          GestureDetector(
+                            onTap: () =>
+                                _openUrl(venue.detailsDocumentUrl!),
+                            child: _badge(
+                              icon: Icons.description_outlined,
+                              label: 'Venue details',
+                              bgColor: AppColors.primary.withValues(alpha: 0.08),
+                              fgColor: AppColors.primary,
                             ),
                           ),
-                        ],
-                      ),
+                      ],
                     ),
                   ],
                 ],
               ),
             ),
-            // Delete button
             GestureDetector(
               onTap: onDelete,
               child: Container(
@@ -398,6 +404,33 @@ class _VenueCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _badge({
+    required IconData icon,
+    required String label,
+    required Color bgColor,
+    required Color fgColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: fgColor),
+          const SizedBox(width: 3),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: fgColor)),
+        ],
       ),
     );
   }

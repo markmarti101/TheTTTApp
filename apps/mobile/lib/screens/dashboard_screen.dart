@@ -11,10 +11,14 @@ import '../services/requests_service.dart';
 import '../services/client_invites_service.dart';
 import '../services/trainer_invites_service.dart';
 import '../services/trainer_profile_service.dart';
+import '../services/notification_service.dart';
+import '../models/app_notification.dart';
 import 'course_request_screen.dart';
 import 'client_requests_screen.dart';
 import 'client_delegates_tab.dart';
 import 'client_course_detail_screen.dart';
+import 'paperwork_screen.dart';
+import 'notifications_screen.dart';
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
@@ -36,6 +40,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<CourseRequest> _requests = [];
   String? _companyName;
   Map<String, String> _venueNames = {}; // venueId → "Name · Address"
+  int _unreadNotifCount = 0;
 
   @override
   void didChangeDependencies() {
@@ -91,12 +96,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         } catch (_) {}
       }
 
+      int unreadCount = 0;
+      try {
+        unreadCount = await NotificationService().getUnreadCount(uid);
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
           _courses = courses;
           _requests = requests;
           _companyName = fetchedCompanyName ?? 'Your Company';
           _venueNames = venueNames;
+          _unreadNotifCount = unreadCount;
           _dataLoaded = true;
           _dataLoading = false;
         });
@@ -166,8 +177,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               dataLoaded: _dataLoaded,
               dataLoading: _dataLoading,
               venueNames: _venueNames,
+              unreadNotifCount: _unreadNotifCount,
               onRefresh: () => _refresh(auth),
               onGoToBookings: () => setState(() => _tab = 1),
+              onNotifRead: () => _refresh(auth),
             ),
             ClientRequestsScreen(
               requests: _requests,
@@ -236,8 +249,10 @@ class _HomeTab extends StatelessWidget {
   final bool dataLoaded;
   final bool dataLoading;
   final Map<String, String> venueNames;
+  final int unreadNotifCount;
   final VoidCallback onRefresh;
   final VoidCallback onGoToBookings;
+  final VoidCallback onNotifRead;
 
   const _HomeTab({
     required this.auth,
@@ -250,8 +265,10 @@ class _HomeTab extends StatelessWidget {
     required this.dataLoaded,
     required this.dataLoading,
     required this.venueNames,
+    required this.unreadNotifCount,
     required this.onRefresh,
     required this.onGoToBookings,
+    required this.onNotifRead,
   });
 
   String get _greeting {
@@ -345,28 +362,49 @@ class _HomeTab extends StatelessWidget {
                       ),
                     ],
                   ),
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.3),
-                          width: 2),
-                    ),
-                    child: Center(
-                      child: Text(
-                        _displayName.isNotEmpty
-                            ? _displayName[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
+                  Row(
+                    children: [
+                      Builder(
+                        builder: (context) => _NotificationBell(
+                          unreadCount: unreadNotifCount,
                           color: Colors.white,
+                          onTap: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => NotificationsScreen(
+                                    userId: auth.user?.uid ?? ''),
+                              ),
+                            );
+                            onNotifRead();
+                          },
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.3),
+                              width: 2),
+                        ),
+                        child: Center(
+                          child: Text(
+                            _displayName.isNotEmpty
+                                ? _displayName[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -899,6 +937,9 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
   String? _companyName;
   List<Map<String, dynamic>> _pendingCompanyInvites = [];
   final Set<String> _inviteActionLoading = {};
+  bool _showAllQualifications = false;
+  bool _showAllCpd = false;
+  int _unreadNotifCount = 0;
 
   @override
   void initState() {
@@ -971,6 +1012,11 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
         } catch (_) {}
       }
 
+      int unreadCount = 0;
+      try {
+        unreadCount = await NotificationService().getUnreadCount(uid);
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
           _allCourses = courses;
@@ -981,6 +1027,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
           _compliance = compliance;
           _companyName = companyName;
           _pendingCompanyInvites = pendingCompanyInvites;
+          _unreadNotifCount = unreadCount;
           _loading = false;
         });
       }
@@ -989,10 +1036,28 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
     }
   }
 
+  final _notifService = NotificationService();
+
   Future<void> _accept(String courseId) async {
     setState(() => _actionLoading.add(courseId));
     try {
       await _coursesService.acceptJob(courseId);
+      // Notify training company owner
+      final course = _invitations.firstWhere(
+        (c) => c.id == courseId,
+        orElse: () => _allCourses.firstWhere((c) => c.id == courseId),
+      );
+      final ownerId =
+          await _notifService.getCompanyOwnerId(course.trainingCompanyId);
+      if (ownerId != null) {
+        await _notifService.send(
+          recipientId: ownerId,
+          title: 'Trainer accepted',
+          body: 'A trainer has accepted the "${course.title}" course.',
+          type: 'trainer_accepted',
+          relatedId: courseId,
+        );
+      }
       await _load();
     } catch (_) {
       if (mounted) {
@@ -1029,6 +1094,22 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
     setState(() => _actionLoading.add(courseId));
     try {
       await _coursesService.declineJob(courseId);
+      // Notify training company owner
+      final course = _invitations.firstWhere(
+        (c) => c.id == courseId,
+        orElse: () => _allCourses.firstWhere((c) => c.id == courseId),
+      );
+      final ownerId =
+          await _notifService.getCompanyOwnerId(course.trainingCompanyId);
+      if (ownerId != null) {
+        await _notifService.send(
+          recipientId: ownerId,
+          title: 'Trainer declined',
+          body: 'A trainer has declined the "${course.title}" course. Please reassign.',
+          type: 'trainer_declined',
+          relatedId: courseId,
+        );
+      }
       await _load();
     } catch (_) {
       if (mounted) {
@@ -1699,7 +1780,10 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
                   height: 1.5),
             )
           else
-            ..._qualifications.map((q) {
+            ...(_showAllQualifications
+                    ? _qualifications
+                    : _qualifications.take(3).toList())
+                .map((q) {
               final expiry = DateTime.tryParse(q.expiryDate);
               final now = DateTime.now();
               final isExpired =
@@ -1806,6 +1890,36 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
                 ),
               );
             }),
+          if (_qualifications.length > 3)
+            GestureDetector(
+              onTap: () => setState(
+                  () => _showAllQualifications = !_showAllQualifications),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _showAllQualifications
+                          ? 'Show less'
+                          : 'Show all (${_qualifications.length})',
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      _showAllQualifications
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      size: 16,
+                      color: AppColors.primary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1987,7 +2101,40 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             )
           else
-            ..._compliance.cpd.map(_buildCPDRow),
+            ...(_showAllCpd
+                    ? _compliance.cpd
+                    : _compliance.cpd.take(3).toList())
+                .map(_buildCPDRow),
+          if (_compliance.cpd.length > 3)
+            GestureDetector(
+              onTap: () =>
+                  setState(() => _showAllCpd = !_showAllCpd),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _showAllCpd
+                          ? 'Show less'
+                          : 'Show all (${_compliance.cpd.length})',
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      _showAllCpd
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      size: 16,
+                      color: AppColors.primary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -2891,13 +3038,18 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
               ],
             ),
           ),
-          TextButton(
-            onPressed: () => widget.auth.signOut(),
-            child: Text(
-              'Sign Out',
-              style: TextStyle(
-                  color: AppColors.textSecondary, fontSize: 13),
-            ),
+          _NotificationBell(
+            unreadCount: _unreadNotifCount,
+            onTap: () async {
+              final uid = widget.auth.user?.uid ?? '';
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => NotificationsScreen(userId: uid),
+                ),
+              );
+              _load();
+            },
           ),
         ],
       ),
@@ -3317,120 +3469,150 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
       'Jul','Aug','Sep','Oct','Nov','Dec'
     ];
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2)),
-        ],
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PaperworkScreen(
+            courseId: course.id,
+            courseNumber: course.courseNumber,
+            courseTitle: course.title,
+            trainingCompanyId: widget.auth.trainingCompanyId ?? '',
+            trainerId: widget.auth.user?.uid ?? '',
+          ),
+        ),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 4,
-            height: 80,
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(14),
-                bottomLeft: Radius.circular(14),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2)),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 4,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(14),
+                  bottomLeft: Radius.circular(14),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '${start.day}',
-                style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.primary),
-              ),
-              Text(
-                months[start.month - 1],
-                style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF94A3B8)),
-              ),
-            ],
-          ),
-          const SizedBox(width: 12),
-          Container(
-              width: 1, height: 48, color: const Color(0xFFF0F0F0)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          course.title,
-                          style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF111111)),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Text(
-                        course.courseNumber,
-                        style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF94A3B8)),
-                      ),
-                      const SizedBox(width: 12),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(Icons.access_time_outlined,
-                          size: 12,
-                          color: AppColors.textSecondary),
-                      const SizedBox(width: 3),
-                      Text(time,
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textSecondary)),
-                      if (venue != null && venue.isNotEmpty) ...[
-                        const SizedBox(width: 10),
-                        Icon(Icons.location_on_outlined,
-                            size: 12,
-                            color: AppColors.textSecondary),
-                        const SizedBox(width: 3),
+            const SizedBox(width: 12),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '${start.day}',
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary),
+                ),
+                Text(
+                  months[start.month - 1],
+                  style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF94A3B8)),
+                ),
+              ],
+            ),
+            const SizedBox(width: 12),
+            Container(
+                width: 1, height: 48, color: const Color(0xFFF0F0F0)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
                         Expanded(
                           child: Text(
-                            venue,
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textSecondary),
+                            course.title,
+                            style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF111111)),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        Text(
+                          course.courseNumber,
+                          style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF94A3B8)),
+                        ),
+                        const SizedBox(width: 12),
                       ],
-                    ],
-                  ),
-                ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.access_time_outlined,
+                            size: 12,
+                            color: AppColors.textSecondary),
+                        const SizedBox(width: 3),
+                        Text(time,
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondary)),
+                        if (venue != null && venue.isNotEmpty) ...[
+                          const SizedBox(width: 10),
+                          Icon(Icons.location_on_outlined,
+                              size: 12,
+                              color: AppColors.textSecondary),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              venue,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(Icons.description_outlined,
+                            size: 11,
+                            color: AppColors.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Tap to view paperwork',
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -4009,6 +4191,55 @@ class _ActionTile extends StatelessWidget {
                     fontWeight: FontWeight.w500)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─── Shared notification bell ─────────────────────────────────────────────────
+
+class _NotificationBell extends StatelessWidget {
+  final int unreadCount;
+  final VoidCallback onTap;
+  final Color color;
+
+  const _NotificationBell({
+    required this.unreadCount,
+    required this.onTap,
+    this.color = const Color(0xFF475569),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(Icons.notifications_outlined, size: 24, color: color),
+          if (unreadCount > 0)
+            Positioned(
+              right: -4,
+              top: -4,
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFDC2626),
+                  shape: BoxShape.circle,
+                ),
+                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                child: Text(
+                  unreadCount > 99 ? '99+' : '$unreadCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

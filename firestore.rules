@@ -235,14 +235,34 @@ service cloud.firestore {
       allow update: if false;
     }
 
-    // Documents: owner or related entity access
+    // Documents: uploader, assigned trainer/client on the course, or company admin
     match /documents/{docId} {
       allow read: if isAuth() && (
-        request.auth.uid == resource.data.ownerId ||
-        getUserRole() == 'training_company'
+        request.auth.uid == resource.data.uploadedBy ||
+        isCompanyAdmin(resource.data.trainingCompanyId) ||
+        (
+          exists(/databases/$(database)/documents/courses/$(resource.data.courseId)) &&
+          (
+            get(/databases/$(database)/documents/courses/$(resource.data.courseId)).data.trainerId == request.auth.uid ||
+            get(/databases/$(database)/documents/courses/$(resource.data.courseId)).data.clientId == request.auth.uid
+          )
+        )
       );
+      allow create: if isAuth() && request.auth.uid == request.resource.data.uploadedBy;
+      allow delete: if isAuth() && (
+        request.auth.uid == resource.data.uploadedBy ||
+        isCompanyAdmin(resource.data.trainingCompanyId)
+      );
+      allow update: if false;
+    }
+
+    // Notifications: each user reads/writes their own
+    match /notifications/{notifId} {
+      allow read: if isAuth() && resource.data.recipientId == request.auth.uid;
       allow create: if isAuth();
-      allow update, delete: if isAuth() && request.auth.uid == resource.data.ownerId;
+      allow update: if isAuth() && resource.data.recipientId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if false;
     }
 
     // Trainer profiles: trainer owns, training companies can read

@@ -1,10 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/theme.dart';
 import '../models/course.dart';
+import '../models/document.dart';
 import '../models/venue.dart';
+import '../providers/auth_provider.dart';
 import '../services/courses_service.dart';
+import '../services/document_service.dart';
+import '../services/notification_service.dart';
 import '../services/venues_service.dart';
 
 class CompanyCourseDetailScreen extends StatefulWidget {
@@ -21,17 +27,20 @@ class _CompanyCourseDetailScreenState
     extends State<CompanyCourseDetailScreen> {
   final _coursesService = CoursesService();
   final _venuesService = VenuesService();
+  final _documentService = DocumentService();
 
   Course? _course;
   Venue? _venue;
   String? _clientDisplay;
   String? _trainerDisplay;
+  List<CourseDocument> _documents = [];
 
   bool _loading = true;
   String? _error;
   bool _assigningVenue = false;
   bool _markingComplete = false;
   bool _settingPoNumber = false;
+  bool _uploadingDoc = false;
 
   @override
   void initState() {
@@ -88,11 +97,17 @@ class _CompanyCourseDetailScreenState
             (data['displayName'] as String?) ?? (data['email'] as String?);
       }
 
+      List<CourseDocument> documents = [];
+      try {
+        documents = await _documentService.getDocumentsByCourse(course.id);
+      } catch (_) {}
+
       setState(() {
         _course = course;
         _venue = venue;
         _clientDisplay = clientDisplay ?? course.clientId;
         _trainerDisplay = trainerDisplay ?? course.trainerId;
+        _documents = documents;
         _loading = false;
       });
     } catch (e) {
@@ -141,6 +156,25 @@ class _CompanyCourseDetailScreenState
     setState(() => _markingComplete = true);
     try {
       await _coursesService.markCourseCompleted(widget.courseId);
+      // Notify client and trainer
+      final course = _course;
+      if (course != null) {
+        final notifs = NotificationService();
+        await notifs.send(
+          recipientId: course.clientId,
+          title: 'Course completed',
+          body: '"${course.title}" has been marked as completed.',
+          type: 'course_completed',
+          relatedId: widget.courseId,
+        );
+        await notifs.send(
+          recipientId: course.trainerId,
+          title: 'Course completed',
+          body: '"${course.title}" has been marked as completed.',
+          type: 'course_completed',
+          relatedId: widget.courseId,
+        );
+      }
       await _load();
     } finally {
       if (mounted) setState(() => _markingComplete = false);
@@ -240,6 +274,51 @@ class _CompanyCourseDetailScreenState
     }
   }
 
+  Future<void> _uploadDocument() async {
+    final course = _course;
+    if (course == null) return;
+    final companyId = context.read<AuthProvider>().trainingCompanyId ?? '';
+    final uid = context.read<AuthProvider>().user?.uid ?? '';
+    setState(() => _uploadingDoc = true);
+    try {
+      final doc = await _documentService.pickAndUpload(
+        courseId: course.id,
+        courseNumber: course.courseNumber,
+        trainingCompanyId: companyId,
+        uploadedBy: uid,
+        uploaderRole: 'training_company',
+        type: DocumentType.preCoursePackk,
+      );
+      if (doc != null && mounted) {
+        await _load();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pre-course pack uploaded.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingDoc = false);
+    }
+  }
+
+  Future<void> _deleteDocument(CourseDocument doc) async {
+    try {
+      await _documentService.deleteDocument(doc);
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to remove document: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -247,7 +326,8 @@ class _CompanyCourseDetailScreenState
       body: _loading ||
               _assigningVenue ||
               _markingComplete ||
-              _settingPoNumber
+              _settingPoNumber ||
+              _uploadingDoc
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary))
           : _error != null
@@ -259,9 +339,12 @@ class _CompanyCourseDetailScreenState
                       venue: _venue,
                       clientDisplay: _clientDisplay,
                       trainerDisplay: _trainerDisplay,
+                      documents: _documents,
                       onAssignVenue: _showAssignVenueSheet,
                       onMarkComplete: _confirmMarkComplete,
                       onSetPoNumber: _showSetPoNumberDialog,
+                      onUploadDocument: _uploadDocument,
+                      onDeleteDocument: _deleteDocument,
                     ),
     );
   }
@@ -274,18 +357,24 @@ class _CourseBody extends StatelessWidget {
   final Venue? venue;
   final String? clientDisplay;
   final String? trainerDisplay;
+  final List<CourseDocument> documents;
   final VoidCallback onAssignVenue;
   final VoidCallback onMarkComplete;
   final VoidCallback onSetPoNumber;
+  final VoidCallback onUploadDocument;
+  final Future<void> Function(CourseDocument) onDeleteDocument;
 
   const _CourseBody({
     required this.course,
     required this.venue,
     required this.clientDisplay,
     required this.trainerDisplay,
+    required this.documents,
     required this.onAssignVenue,
     required this.onMarkComplete,
     required this.onSetPoNumber,
+    required this.onUploadDocument,
+    required this.onDeleteDocument,
   });
 
   @override
@@ -312,6 +401,12 @@ class _CourseBody extends StatelessWidget {
                 const SizedBox(height: 12),
                 _NotesCard(notes: course.notes!),
               ],
+              const SizedBox(height: 12),
+              _DocumentsCard(
+                documents: documents,
+                onUpload: onUploadDocument,
+                onDelete: onDeleteDocument,
+              ),
               if (course.status != 'completed' && course.status != 'declined') ...[
                 const SizedBox(height: 24),
                 SizedBox(
@@ -785,6 +880,129 @@ class _StatusBadge extends StatelessWidget {
           color: fg,
         ),
       ),
+    );
+  }
+}
+
+// ─── Documents Card ────────────────────────────────────────────────────────────
+
+class _DocumentsCard extends StatelessWidget {
+  final List<CourseDocument> documents;
+  final VoidCallback onUpload;
+  final Future<void> Function(CourseDocument) onDelete;
+
+  const _DocumentsCard({
+    required this.documents,
+    required this.onUpload,
+    required this.onDelete,
+  });
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _InfoCard(
+      title: 'Pre-Course Pack',
+      trailing: TextButton.icon(
+        onPressed: onUpload,
+        icon: const Icon(Icons.upload_file_outlined, size: 14),
+        label: const Text('Upload'),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          foregroundColor: AppColors.primary,
+          textStyle: const TextStyle(
+              fontSize: 13, fontWeight: FontWeight.w700),
+        ),
+      ),
+      children: documents.isEmpty
+          ? [
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: Text(
+                    'No documents uploaded yet',
+                    style: TextStyle(
+                        fontSize: 14, color: Color(0xFF94A3B8)),
+                  ),
+                ),
+              ),
+            ]
+          : documents
+              .map(
+                (doc) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: const Icon(
+                            Icons.insert_drive_file_outlined,
+                            color: AppColors.primary,
+                            size: 17),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              doc.fileName,
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF1E293B)),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              DocumentType.label(doc.type),
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF94A3B8)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => _openUrl(doc.downloadUrl),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text('View',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => onDelete(doc),
+                        child: const Icon(Icons.close,
+                            size: 16, color: Color(0xFFCBD5E1)),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+              .toList(),
     );
   }
 }

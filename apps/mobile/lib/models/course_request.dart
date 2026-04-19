@@ -11,6 +11,14 @@ class CourseRequest {
   final String createdAt;
   final String updatedAt;
 
+  // Booking form fields
+  final int? delegateCount;
+  final String? poNumber;
+  final String? venuePreference;
+  final String? venueSetup; // 'classroom' | 'theatre' | 'cabaret' | 'boardroom'
+  final String? cateringNotes;
+  final String? accessibilityNotes;
+
   CourseRequest({
     required this.id,
     required this.trainingCompanyId,
@@ -23,6 +31,12 @@ class CourseRequest {
     this.declineReason,
     required this.createdAt,
     required this.updatedAt,
+    this.delegateCount,
+    this.poNumber,
+    this.venuePreference,
+    this.venueSetup,
+    this.cateringNotes,
+    this.accessibilityNotes,
   });
 
   factory CourseRequest.fromFirestore(String id, Map<String, dynamic> data) {
@@ -40,6 +54,12 @@ class CourseRequest {
       declineReason: data['declineReason'] as String?,
       createdAt: data['createdAt'] as String? ?? '',
       updatedAt: data['updatedAt'] as String? ?? '',
+      delegateCount: (data['delegateCount'] as num?)?.toInt(),
+      poNumber: data['poNumber'] as String?,
+      venuePreference: data['venuePreference'] as String?,
+      venueSetup: data['venueSetup'] as String?,
+      cateringNotes: data['cateringNotes'] as String?,
+      accessibilityNotes: data['accessibilityNotes'] as String?,
     );
   }
 }

@@ -18,6 +18,7 @@ class _AddVenueScreenState extends State<AddVenueScreen> {
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
   final _capacityController = TextEditingController();
+  final _detailsUrlController = TextEditingController();
 
   bool _saving = false;
 
@@ -26,6 +27,7 @@ class _AddVenueScreenState extends State<AddVenueScreen> {
     _nameController.dispose();
     _addressController.dispose();
     _capacityController.dispose();
+    _detailsUrlController.dispose();
     super.dispose();
   }
 
@@ -48,6 +50,7 @@ class _AddVenueScreenState extends State<AddVenueScreen> {
       final capacity =
           capacityText.isEmpty ? null : int.tryParse(capacityText);
 
+      final detailsUrl = _detailsUrlController.text.trim();
       final data = <String, dynamic>{
         'name': _nameController.text.trim(),
         'address': _addressController.text.trim(),
@@ -55,9 +58,8 @@ class _AddVenueScreenState extends State<AddVenueScreen> {
         'createdAt': now,
         'updatedAt': now,
       };
-      if (capacity != null) {
-        data['capacity'] = capacity;
-      }
+      if (capacity != null) data['capacity'] = capacity;
+      if (detailsUrl.isNotEmpty) data['detailsDocumentUrl'] = detailsUrl;
 
       await FirebaseFirestore.instance.collection('venues').add(data);
 
@@ -138,6 +140,17 @@ class _AddVenueScreenState extends State<AddVenueScreen> {
                     if (parsed == null || parsed < 0) return 'Invalid number';
                     return null;
                   },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _detailsUrlController,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    labelText: 'Venue details document URL (optional)',
+                    hintText: 'e.g. https://drive.google.com/…',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.link_outlined),
+                  ),
                 ),
                 const SizedBox(height: 24),
                 SizedBox(

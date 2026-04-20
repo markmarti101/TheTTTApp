@@ -61,6 +61,18 @@ class NotificationService {
     await batch.commit();
   }
 
+  Future<void> clearAll(String userId) async {
+    final snap = await _db
+        .collection(_col)
+        .where('recipientId', isEqualTo: userId)
+        .get();
+    final batch = _db.batch();
+    for (final doc in snap.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
   /// Looks up the ownerId of a training company — used to notify the company admin.
   Future<String?> getCompanyOwnerId(String trainingCompanyId) async {
     final doc = await _db

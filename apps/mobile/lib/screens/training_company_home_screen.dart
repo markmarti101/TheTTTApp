@@ -20,6 +20,7 @@ import 'company_trainers_screen.dart';
 import 'add_client_screen.dart';
 import 'company_venues_screen.dart';
 import 'resources_screen.dart';
+import 'reports_screen.dart';
 import 'notifications_screen.dart';
 import '../services/notification_service.dart';
 
@@ -705,6 +706,19 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
                 MaterialPageRoute(
                   builder: (context) =>
                       ResourcesScreen(companyId: _companyId ?? ''),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.bar_chart_outlined),
+            title: const Text('Reports'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      ReportsScreen(companyId: _companyId ?? ''),
                 ),
               );
             },

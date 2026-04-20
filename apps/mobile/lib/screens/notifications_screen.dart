@@ -38,6 +38,33 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     await _load();
   }
 
+  Future<void> _clearAll() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Clear all notifications?',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+        content: const Text('This will permanently delete all notifications.',
+            style: TextStyle(color: Color(0xFF64748B))),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
+            child: const Text('Clear all'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _service.clearAll(widget.userId);
+    await _load();
+  }
+
   Future<void> _markRead(AppNotification n) async {
     if (n.read) return;
     await _service.markRead(n.id);
@@ -77,7 +104,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Widget _buildHeader() {
     return Container(
-      color: Colors.white,
+      color: const Color(0xFFF5F6FA),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       child: Row(
         children: [
@@ -113,6 +140,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: AppColors.primary),
+              ),
+            ),
+          if (_notifications.isNotEmpty)
+            GestureDetector(
+              onTap: _clearAll,
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFEEEE),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.delete_outline,
+                    size: 17, color: Color(0xFFDC2626)),
               ),
             ),
         ],

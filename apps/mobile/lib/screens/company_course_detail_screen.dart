@@ -6,12 +6,15 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/theme.dart';
 import '../models/course.dart';
 import '../models/document.dart';
+import '../models/invoice.dart';
 import '../models/venue.dart';
 import '../providers/auth_provider.dart';
 import '../services/courses_service.dart';
 import '../services/document_service.dart';
+import '../services/invoice_service.dart';
 import '../services/notification_service.dart';
 import '../services/venues_service.dart';
+import 'invoice_detail_screen.dart';
 
 class CompanyCourseDetailScreen extends StatefulWidget {
   final String courseId;
@@ -28,12 +31,14 @@ class _CompanyCourseDetailScreenState
   final _coursesService = CoursesService();
   final _venuesService = VenuesService();
   final _documentService = DocumentService();
+  final _invoiceService = InvoiceService();
 
   Course? _course;
   Venue? _venue;
   String? _clientDisplay;
   String? _trainerDisplay;
   List<CourseDocument> _documents = [];
+  Invoice? _invoice;
 
   bool _loading = true;
   String? _error;
@@ -41,6 +46,7 @@ class _CompanyCourseDetailScreenState
   bool _markingComplete = false;
   bool _settingPoNumber = false;
   bool _uploadingDoc = false;
+  bool _creatingInvoice = false;
 
   @override
   void initState() {
@@ -102,12 +108,18 @@ class _CompanyCourseDetailScreenState
         documents = await _documentService.getDocumentsByCourse(course.id);
       } catch (_) {}
 
+      Invoice? invoice;
+      try {
+        invoice = await _invoiceService.getInvoiceByCourse(course.id);
+      } catch (_) {}
+
       setState(() {
         _course = course;
         _venue = venue;
         _clientDisplay = clientDisplay ?? course.clientId;
         _trainerDisplay = trainerDisplay ?? course.trainerId;
         _documents = documents;
+        _invoice = invoice;
         _loading = false;
       });
     } catch (e) {
@@ -306,6 +318,202 @@ class _CompanyCourseDetailScreenState
     }
   }
 
+  Future<void> _showCreateInvoiceSheet() async {
+    final course = _course;
+    if (course == null) return;
+
+    final amountController = TextEditingController();
+    final notesController = TextEditingController(text: course.poNumber ?? '');
+    DateTime dueDate = DateTime.now().add(const Duration(days: 30));
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Create Invoice',
+                      style: TextStyle(
+                          fontSize: 17, fontWeight: FontWeight.w800)),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20,
+                        color: Color(0xFF94A3B8)),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: amountController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Amount (£)',
+                  prefixText: '£ ',
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide:
+                          const BorderSide(color: Color(0xFFE2E8F0))),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                          color: AppColors.primary, width: 1.5)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: dueDate,
+                    firstDate: DateTime.now(),
+                    lastDate:
+                        DateTime.now().add(const Duration(days: 365)),
+                    builder: (context, child) => Theme(
+                      data: Theme.of(context).copyWith(
+                        colorScheme: const ColorScheme.light(
+                            primary: AppColors.primary),
+                      ),
+                      child: child!,
+                    ),
+                  );
+                  if (picked != null) {
+                    setSheet(() => dueDate = picked);
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today_outlined,
+                          size: 16, color: AppColors.primary),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Due: ${dueDate.day}/${dueDate.month}/${dueDate.year}',
+                        style: const TextStyle(
+                            fontSize: 14, color: Color(0xFF1E293B)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: notesController,
+                decoration: InputDecoration(
+                  labelText: 'Notes (optional)',
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide:
+                          const BorderSide(color: Color(0xFFE2E8F0))),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                          color: AppColors.primary, width: 1.5)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final amt =
+                        double.tryParse(amountController.text.trim());
+                    if (amt == null || amt <= 0) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                            content:
+                                Text('Please enter a valid amount')),
+                      );
+                      return;
+                    }
+                    Navigator.pop(ctx);
+                    setState(() => _creatingInvoice = true);
+                    try {
+                      final id =
+                          await _invoiceService.createInvoice(
+                        courseId: course.id,
+                        courseTitle: course.title,
+                        clientId: course.clientId,
+                        trainingCompanyId: course.trainingCompanyId,
+                        amount: amt,
+                        dueDate: dueDate,
+                        poNumber: course.poNumber,
+                        notes: notesController.text.trim().isEmpty
+                            ? null
+                            : notesController.text.trim(),
+                      );
+                      await _load();
+                      if (mounted) {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                InvoiceDetailScreen(invoiceId: id),
+                          ),
+                        );
+                        await _load();
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content:
+                                  Text('Failed to create invoice: $e')),
+                        );
+                      }
+                    } finally {
+                      if (mounted) {
+                        setState(() => _creatingInvoice = false);
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    textStyle: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                  child: const Text('Create Invoice'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _deleteDocument(CourseDocument doc) async {
     try {
       await _documentService.deleteDocument(doc);
@@ -327,7 +535,8 @@ class _CompanyCourseDetailScreenState
               _assigningVenue ||
               _markingComplete ||
               _settingPoNumber ||
-              _uploadingDoc
+              _uploadingDoc ||
+              _creatingInvoice
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary))
           : _error != null
@@ -340,11 +549,13 @@ class _CompanyCourseDetailScreenState
                       clientDisplay: _clientDisplay,
                       trainerDisplay: _trainerDisplay,
                       documents: _documents,
+                      invoice: _invoice,
                       onAssignVenue: _showAssignVenueSheet,
                       onMarkComplete: _confirmMarkComplete,
                       onSetPoNumber: _showSetPoNumberDialog,
                       onUploadDocument: _uploadDocument,
                       onDeleteDocument: _deleteDocument,
+                      onCreateInvoice: _showCreateInvoiceSheet,
                     ),
     );
   }
@@ -358,11 +569,13 @@ class _CourseBody extends StatelessWidget {
   final String? clientDisplay;
   final String? trainerDisplay;
   final List<CourseDocument> documents;
+  final Invoice? invoice;
   final VoidCallback onAssignVenue;
   final VoidCallback onMarkComplete;
   final VoidCallback onSetPoNumber;
   final VoidCallback onUploadDocument;
   final Future<void> Function(CourseDocument) onDeleteDocument;
+  final VoidCallback onCreateInvoice;
 
   const _CourseBody({
     required this.course,
@@ -370,11 +583,13 @@ class _CourseBody extends StatelessWidget {
     required this.clientDisplay,
     required this.trainerDisplay,
     required this.documents,
+    required this.invoice,
     required this.onAssignVenue,
     required this.onMarkComplete,
     required this.onSetPoNumber,
     required this.onUploadDocument,
     required this.onDeleteDocument,
+    required this.onCreateInvoice,
   });
 
   @override
@@ -397,6 +612,11 @@ class _CourseBody extends StatelessWidget {
               const SizedBox(height: 12),
               _PONumberCard(
                   poNumber: course.poNumber, onSet: onSetPoNumber),
+              const SizedBox(height: 12),
+              _InvoiceCard(
+                invoice: invoice,
+                onCreateInvoice: onCreateInvoice,
+              ),
               if (course.notes != null && course.notes!.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _NotesCard(notes: course.notes!),
@@ -1004,6 +1224,160 @@ class _DocumentsCard extends StatelessWidget {
               )
               .toList(),
     );
+  }
+}
+
+// ─── Invoice Card ──────────────────────────────────────────────────────────────
+
+class _InvoiceCard extends StatelessWidget {
+  final Invoice? invoice;
+  final VoidCallback onCreateInvoice;
+  const _InvoiceCard(
+      {required this.invoice, required this.onCreateInvoice});
+
+  @override
+  Widget build(BuildContext context) {
+    final inv = invoice;
+    if (inv == null) {
+      return _InfoCard(
+        title: 'Invoice',
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'No invoice created yet',
+                  style: TextStyle(
+                      fontSize: 14, color: Color(0xFF94A3B8)),
+                ),
+                TextButton.icon(
+                  onPressed: onCreateInvoice,
+                  icon: const Icon(Icons.add, size: 14),
+                  label: const Text('Create'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    textStyle: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    final (statusLabel, statusBg, statusFg) = switch (inv.status) {
+      'paid' => (
+          'Paid',
+          const Color(0xFFDCFCE7),
+          const Color(0xFF16A34A)
+        ),
+      'sent' => (
+          'Sent',
+          const Color(0xFFDBEAFE),
+          const Color(0xFF2563EB)
+        ),
+      'overdue' => (
+          'Overdue',
+          const Color(0xFFFEE2E2),
+          const Color(0xFFDC2626)
+        ),
+      _ => ('Draft', const Color(0xFFF1F5F9), const Color(0xFF64748B)),
+    };
+
+    return _InfoCard(
+      title: 'Invoice',
+      trailing: TextButton(
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => InvoiceDetailScreen(invoiceId: inv.id),
+            ),
+          );
+        },
+        style: TextButton.styleFrom(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: const Text(
+          'View →',
+          style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primary),
+        ),
+      ),
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  inv.invoiceNumber,
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1E293B)),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Due ${_fmtDate(inv.dueDate)}',
+                  style: const TextStyle(
+                      fontSize: 12, color: Color(0xFF94A3B8)),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                Text(
+                  '£${inv.amount.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.text),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: statusBg,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: statusFg),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String _fmtDate(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${d.day} ${months[d.month - 1]} ${d.year}';
   }
 }
 

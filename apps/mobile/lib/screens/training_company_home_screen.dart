@@ -18,9 +18,11 @@ import 'setup_company_screen.dart';
 import 'requests_list_screen.dart';
 import 'company_trainers_screen.dart';
 import 'add_client_screen.dart';
+import 'add_trainer_screen.dart';
 import 'company_venues_screen.dart';
 import 'resources_screen.dart';
 import 'reports_screen.dart';
+import 'invoices_screen.dart';
 import 'notifications_screen.dart';
 import '../services/notification_service.dart';
 
@@ -548,33 +550,6 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
     return const SizedBox.shrink();
   }
 
-  Widget _buildDrawerCompanyTitle() {
-    const style = TextStyle(
-      fontWeight: FontWeight.w800,
-      fontSize: 16,
-      color: AppColors.text,
-    );
-    final name = _resolvedCompanyName;
-    if (name != null) {
-      return Text(
-        name,
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
-        style: style,
-      );
-    }
-    if (_loadingMonth) {
-      return const SizedBox(
-        height: 22,
-        width: 22,
-        child: CircularProgressIndicator(
-          strokeWidth: 2.5,
-          color: AppColors.primary,
-        ),
-      );
-    }
-    return const SizedBox.shrink();
-  }
 
   Widget _buildGreetingCompanyMonthLine() {
     final monthYear = _fullMonthYear(DateTime.now());
@@ -662,75 +637,156 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
   }
 
   Widget _buildDrawer() {
+    const itemStyle = TextStyle(
+      fontSize: 15,
+      fontWeight: FontWeight.w600,
+      color: Color(0xFF1C1C1C),
+    );
+
+    Widget drawerItem({
+      required IconData icon,
+      required String label,
+      required VoidCallback onTap,
+    }) {
+      return ListTile(
+        leading: Icon(icon, color: AppColors.primary, size: 22),
+        title: Text(label, style: itemStyle),
+        onTap: onTap,
+        horizontalTitleGap: 8,
+      );
+    }
+
     return Drawer(
+      backgroundColor: Colors.white,
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          DrawerHeader(
-            decoration: BoxDecoration(color: AppColors.card),
-            child: Align(
-              alignment: Alignment.bottomLeft,
-              child: _buildDrawerCompanyTitle(),
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF2DB89E), Color(0xFF1A9980)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              MediaQuery.of(context).padding.top + 24,
+              20,
+              24,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.business, color: Colors.white, size: 24),
+                ),
+                const SizedBox(height: 12),
+                _buildDrawerCompanyTitleWhite(),
+                const SizedBox(height: 4),
+                Text(
+                  'Training Company',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.75),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
           ),
-          ListTile(
-            leading: const Icon(Icons.badge_outlined),
-            title: const Text('Trainers'),
-            onTap: () {
-              Navigator.push(
+          const SizedBox(height: 8),
+          drawerItem(
+            icon: Icons.badge_outlined,
+            label: 'Trainers',
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const CompanyTrainersScreen())),
+          ),
+          drawerItem(
+            icon: Icons.location_on_outlined,
+            label: 'Venues',
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const CompanyVenuesScreen())),
+          ),
+          drawerItem(
+            icon: Icons.inventory_2_outlined,
+            label: 'Resources',
+            onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const CompanyTrainersScreen(),
-                ),
-              );
-            },
+                    builder: (_) =>
+                        ResourcesScreen(companyId: _companyId ?? ''))),
           ),
-          ListTile(
-            leading: const Icon(Icons.location_on_outlined),
-            title: const Text('Venues'),
-            onTap: () {
-              Navigator.push(
+          drawerItem(
+            icon: Icons.receipt_long_outlined,
+            label: 'Invoices',
+            onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const CompanyVenuesScreen(),
-                ),
-              );
-            },
+                    builder: (_) =>
+                        InvoicesScreen(companyId: _companyId ?? ''))),
           ),
-          ListTile(
-            leading: const Icon(Icons.inventory_2_outlined),
-            title: const Text('Resources'),
-            onTap: () {
-              Navigator.push(
+          drawerItem(
+            icon: Icons.bar_chart_outlined,
+            label: 'Reports',
+            onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) =>
-                      ResourcesScreen(companyId: _companyId ?? ''),
-                ),
-              );
-            },
+                    builder: (_) =>
+                        ReportsScreen(companyId: _companyId ?? ''))),
           ),
+          const Divider(height: 1, color: Color(0xFFF0F0F0)),
+          const SizedBox(height: 4),
           ListTile(
-            leading: const Icon(Icons.bar_chart_outlined),
-            title: const Text('Reports'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      ReportsScreen(companyId: _companyId ?? ''),
-                ),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.logout_outlined),
-            title: const Text('Sign out'),
+            leading: const Icon(Icons.logout_outlined,
+                color: Color(0xFFDC2626), size: 22),
+            title: const Text(
+              'Sign out',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFDC2626),
+              ),
+            ),
+            horizontalTitleGap: 8,
             onTap: () => context.read<AuthProvider>().signOut(),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildDrawerCompanyTitleWhite() {
+    final name = _resolvedCompanyName;
+    if (name != null) {
+      return Text(
+        name,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontWeight: FontWeight.w800,
+          fontSize: 18,
+          color: Colors.white,
+        ),
+      );
+    }
+    if (_loadingMonth) {
+      return const SizedBox(
+        height: 22,
+        width: 22,
+        child: CircularProgressIndicator(
+          strokeWidth: 2.5,
+          color: Colors.white,
+        ),
+      );
+    }
+    return const SizedBox.shrink();
   }
 
   Widget _buildCalendarTab() {
@@ -1052,16 +1108,17 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
           children: [
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
+                onPressed: () async {
+                  await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const RequestsListScreen(),
+                      builder: (context) => const AddTrainerScreen(),
                     ),
                   );
+                  _loadMonthData();
                 },
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('New Course'),
+                icon: const Icon(Icons.badge_outlined, size: 18),
+                label: const Text('Add Trainer'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,

@@ -265,13 +265,23 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Trainer profiles: trainer owns, training companies can read
+    // Trainer profiles: trainer owns, training companies can read main doc only
     match /trainer_profiles/{trainerId} {
       allow read: if isAuth() && (
         request.auth.uid == trainerId ||
         getUserRole() == 'training_company'
       );
       allow write: if isAuth() && request.auth.uid == trainerId;
+
+      // Private subcollection (banking details): owner only
+      match /private/{docId} {
+        allow read, write: if isAuth() && request.auth.uid == trainerId;
+      }
+
+      // Course notes: owner only
+      match /course_notes/{courseId} {
+        allow read, write: if isAuth() && request.auth.uid == trainerId;
+      }
     }
 
     // Trainer rates: company admins set rates per trainer

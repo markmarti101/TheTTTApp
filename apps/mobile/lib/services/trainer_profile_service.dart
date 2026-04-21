@@ -121,6 +121,60 @@ class TrainerRate {
   });
 }
 
+class BankingDetails {
+  final String? accountHolderName;
+  final String? bankName;
+  final String? accountNumber;
+  final String? sortCode;
+
+  BankingDetails({
+    this.accountHolderName,
+    this.bankName,
+    this.accountNumber,
+    this.sortCode,
+  });
+
+  bool get isEmpty =>
+      (accountHolderName?.isEmpty ?? true) &&
+      (bankName?.isEmpty ?? true) &&
+      (accountNumber?.isEmpty ?? true) &&
+      (sortCode?.isEmpty ?? true);
+
+  Map<String, dynamic> toMap() => {
+        if (accountHolderName != null) 'accountHolderName': accountHolderName,
+        if (bankName != null) 'bankName': bankName,
+        if (accountNumber != null) 'accountNumber': accountNumber,
+        if (sortCode != null) 'sortCode': sortCode,
+      };
+
+  factory BankingDetails.fromMap(Map<String, dynamic> m) => BankingDetails(
+        accountHolderName: m['accountHolderName'] as String?,
+        bankName: m['bankName'] as String?,
+        accountNumber: m['accountNumber'] as String?,
+        sortCode: m['sortCode'] as String?,
+      );
+}
+
+class CourseNote {
+  final String id;
+  final String text;
+  final String createdAt;
+
+  CourseNote({required this.id, required this.text, required this.createdAt});
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'text': text,
+        'createdAt': createdAt,
+      };
+
+  factory CourseNote.fromMap(Map<String, dynamic> m) => CourseNote(
+        id: m['id'] as String? ?? '',
+        text: m['text'] as String? ?? '',
+        createdAt: m['createdAt'] as String? ?? '',
+      );
+}
+
 class TrainerProfileService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -279,5 +333,107 @@ class TrainerProfileService {
       'contractUrl': contractUrl,
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
     }, SetOptions(merge: true));
+  }
+
+  // ── Banking details (trainer-owned) ───────────────────────────────────────
+
+  Future<BankingDetails> getBankingDetails(String trainerId) async {
+    try {
+      final doc = await _firestore
+          .collection('trainer_profiles')
+          .doc(trainerId)
+          .collection('private')
+          .doc('banking')
+          .get();
+      if (!doc.exists) return BankingDetails();
+      final data = doc.data();
+      if (data == null) return BankingDetails();
+      return BankingDetails.fromMap(data);
+    } catch (_) {
+      return BankingDetails();
+    }
+  }
+
+  Future<void> clearBankingDetails(String trainerId) async {
+    await _firestore
+        .collection('trainer_profiles')
+        .doc(trainerId)
+        .collection('private')
+        .doc('banking')
+        .delete();
+  }
+
+  Future<void> setBankingDetails(
+      String trainerId, BankingDetails details) async {
+    await _firestore
+        .collection('trainer_profiles')
+        .doc(trainerId)
+        .collection('private')
+        .doc('banking')
+        .set({
+      ...details.toMap(),
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  // ── Course notes (trainer-owned, per course) ──────────────────────────────
+
+  Future<List<CourseNote>> getCourseNotes(
+      String trainerId, String courseId) async {
+    try {
+      final doc = await _firestore
+          .collection('trainer_profiles')
+          .doc(trainerId)
+          .collection('course_notes')
+          .doc(courseId)
+          .get();
+      if (!doc.exists) return [];
+      final list = doc.data()?['notes'] as List<dynamic>?;
+      if (list == null) return [];
+      return list
+          .whereType<Map<String, dynamic>>()
+          .map(CourseNote.fromMap)
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> addCourseNote(
+      String trainerId, String courseId, String text) async {
+    final existing = await getCourseNotes(trainerId, courseId);
+    existing.insert(
+      0,
+      CourseNote(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        text: text,
+        createdAt: DateTime.now().toUtc().toIso8601String(),
+      ),
+    );
+    await _firestore
+        .collection('trainer_profiles')
+        .doc(trainerId)
+        .collection('course_notes')
+        .doc(courseId)
+        .set({
+      'notes': existing.map((n) => n.toMap()).toList(),
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  Future<void> deleteCourseNote(
+      String trainerId, String courseId, String noteId) async {
+    final existing = await getCourseNotes(trainerId, courseId);
+    existing.removeWhere((n) => n.id == noteId);
+    await _firestore
+        .collection('trainer_profiles')
+        .doc(trainerId)
+        .collection('course_notes')
+        .doc(courseId)
+        .set({
+      'notes': existing.map((n) => n.toMap()).toList(),
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+    });
   }
 }

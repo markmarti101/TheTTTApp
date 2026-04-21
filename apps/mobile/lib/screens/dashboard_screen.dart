@@ -17,8 +17,8 @@ import 'course_request_screen.dart';
 import 'client_requests_screen.dart';
 import 'client_delegates_tab.dart';
 import 'client_course_detail_screen.dart';
-import 'paperwork_screen.dart';
 import 'notifications_screen.dart';
+import 'trainer_course_detail_screen.dart';
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
@@ -940,10 +940,16 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
   bool _showAllQualifications = false;
   bool _showAllCpd = false;
   int _unreadNotifCount = 0;
+  BankingDetails _bankingDetails = BankingDetails();
+
+  late DateTime _focusedMonth;
+  DateTime? _selectedDay;
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _focusedMonth = DateTime(now.year, now.month, 1);
     _load();
   }
 
@@ -1017,6 +1023,11 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
         unreadCount = await NotificationService().getUnreadCount(uid);
       } catch (_) {}
 
+      BankingDetails bankingDetails = BankingDetails();
+      try {
+        bankingDetails = await _profileService.getBankingDetails(uid);
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
           _allCourses = courses;
@@ -1028,6 +1039,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
           _companyName = companyName;
           _pendingCompanyInvites = pendingCompanyInvites;
           _unreadNotifCount = unreadCount;
+          _bankingDetails = bankingDetails;
           _loading = false;
         });
       }
@@ -1218,30 +1230,52 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
   }
 
   Widget _buildTrainerCalendarTab() {
-    final sorted = [..._allCourses]
-      ..sort((a, b) => a.startDate.compareTo(b.startDate));
-
-    const months = [
-      'January','February','March','April','May','June',
-      'July','August','September','October','November','December'
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
     ];
     const monthsShort = [
-      'Jan','Feb','Mar','Apr','May','Jun',
-      'Jul','Aug','Sep','Oct','Nov','Dec'
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
 
-    // Group by year-month
-    final grouped = <String, List<Course>>{};
-    for (final c in sorted) {
-      final key = '${months[c.startDate.month - 1]} ${c.startDate.year}';
-      grouped.putIfAbsent(key, () => []).add(c);
+    final courseCountByKey = <String, int>{};
+    for (final c in _allCourses) {
+      final key = _dayKey(c.startDate);
+      courseCountByKey[key] = (courseCountByKey[key] ?? 0) + 1;
+    }
+
+    final List<Course> visibleCourses;
+    if (_selectedDay != null) {
+      visibleCourses = _allCourses
+          .where((c) => _isSameDay(c.startDate, _selectedDay!))
+          .toList()
+        ..sort((a, b) => a.startDate.compareTo(b.startDate));
+    } else {
+      visibleCourses = _allCourses
+          .where((c) =>
+              c.startDate.year == _focusedMonth.year &&
+              c.startDate.month == _focusedMonth.month)
+          .toList()
+        ..sort((a, b) => a.startDate.compareTo(b.startDate));
+    }
+
+    final monthLabel =
+        '${monthNames[_focusedMonth.month - 1]} ${_focusedMonth.year}';
+
+    String listLabel;
+    if (_selectedDay != null) {
+      listLabel =
+          '${_selectedDay!.day} ${monthsShort[_selectedDay!.month - 1]} ${_selectedDay!.year}';
+    } else {
+      listLabel = monthNames[_focusedMonth.month - 1];
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
           child: const Text(
             'Calendar',
             style: TextStyle(
@@ -1250,252 +1284,357 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
                 color: AppColors.text),
           ),
         ),
+        const SizedBox(height: 12),
+        // Month navigation header
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left,
+                    color: AppColors.text, size: 22),
+                onPressed: () => setState(() {
+                  _focusedMonth = DateTime(
+                      _focusedMonth.year, _focusedMonth.month - 1, 1);
+                  _selectedDay = null;
+                }),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                monthLabel,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.text,
+                ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.chevron_right,
+                    color: AppColors.text, size: 22),
+                onPressed: () => setState(() {
+                  _focusedMonth = DateTime(
+                      _focusedMonth.year, _focusedMonth.month + 1, 1);
+                  _selectedDay = null;
+                }),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const Spacer(),
+              if (_selectedDay != null)
+                GestureDetector(
+                  onTap: () => setState(() => _selectedDay = null),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Show all',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.close,
+                            size: 14, color: AppColors.primary),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        // Calendar grid
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _loading
+              ? const SizedBox.shrink()
+              : TrainerMonthCalendar(
+                  focusedMonth: _focusedMonth,
+                  selectedDay: _selectedDay,
+                  courseCountByDayKey: courseCountByKey,
+                  onDaySelected: (day) => setState(() {
+                    if (_selectedDay != null && _isSameDay(_selectedDay!, day)) {
+                      _selectedDay = null;
+                    } else {
+                      _selectedDay = day;
+                    }
+                  }),
+                ),
+        ),
+        const SizedBox(height: 16),
+        // List section label
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              Text(
+                listLabel,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  color:
+                      AppColors.textSecondary.withValues(alpha: 0.85),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${visibleCourses.length}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Course list
         Expanded(
           child: _loading
               ? const Center(
                   child: CircularProgressIndicator(
                       color: AppColors.primary))
-              : sorted.isEmpty
+              : visibleCourses.isEmpty
                   ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.calendar_today_outlined,
-                                size: 48,
-                                color: const Color(0xFFCCCCCC)),
-                            const SizedBox(height: 12),
-                            Text(
-                              'No courses scheduled',
-                              style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textSecondary),
-                            ),
-                          ],
-                        ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.calendar_today_outlined,
+                              size: 40,
+                              color: const Color(0xFFCCCCCC)),
+                          const SizedBox(height: 10),
+                          Text(
+                            _selectedDay != null
+                                ? 'No courses on this day'
+                                : 'No courses this month',
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textSecondary),
+                          ),
+                        ],
                       ),
                     )
                   : RefreshIndicator(
                       onRefresh: _load,
                       color: AppColors.primary,
-                      child: ListView(
+                      child: ListView.separated(
                         padding:
                             const EdgeInsets.fromLTRB(16, 0, 16, 32),
-                        children: grouped.entries.map((entry) {
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                    top: 16, bottom: 8),
-                                child: Text(
-                                  entry.key,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.8,
-                                    color: AppColors.textSecondary
-                                        .withValues(alpha: 0.85),
+                        itemCount: visibleCourses.length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final c = visibleCourses[index];
+                          final s = c.startDate;
+                          final time =
+                              '${s.hour.toString().padLeft(2, '0')}:${s.minute.toString().padLeft(2, '0')}';
+                          final venue = c.venueId != null
+                              ? _venueNames[c.venueId]
+                              : null;
+                          final isPending =
+                              c.status == 'pending_trainer';
+                          final statusLabel =
+                              isPending ? 'Pending' : 'Confirmed';
+                          final statusColor = isPending
+                              ? AppColors.primary
+                              : const Color(0xFF1B6B4A);
+                          final statusBg = isPending
+                              ? AppColors.primary
+                                  .withValues(alpha: 0.1)
+                              : const Color(0xFFE8F7F2);
+
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black
+                                      .withValues(alpha: 0.04),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 4,
+                                  height: 74,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary,
+                                    borderRadius: const BorderRadius.only(
+                                      topLeft: Radius.circular(14),
+                                      bottomLeft: Radius.circular(14),
+                                    ),
                                   ),
                                 ),
-                              ),
-                              ...entry.value.map((c) {
-                                final s = c.startDate;
-                                final time =
-                                    '${s.hour.toString().padLeft(2, '0')}:${s.minute.toString().padLeft(2, '0')}';
-                                final venue = c.venueId != null
-                                    ? _venueNames[c.venueId]
-                                    : null;
-                                final isPending =
-                                    c.status == 'pending_trainer';
-                                final statusLabel =
-                                    isPending ? 'Pending' : 'Confirmed';
-                                final statusColor = isPending
-                                    ? AppColors.primary
-                                    : const Color(0xFF1B6B4A);
-                                final statusBg = isPending
-                                    ? AppColors.primary.withValues(alpha: 0.1)
-                                    : const Color(0xFFE8F7F2);
-
-                                return Container(
-                                  margin:
-                                      const EdgeInsets.only(bottom: 10),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius:
-                                        BorderRadius.circular(14),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.04),
-                                        blurRadius: 6,
-                                        offset: const Offset(0, 2),
+                                const SizedBox(width: 12),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      '${s.day}',
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.primary,
                                       ),
-                                    ],
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 4,
-                                        height: 74,
-                                        decoration: BoxDecoration(
-                                          color: isPending
-                                              ? AppColors.primary
-                                              : AppColors.primary,
-                                          borderRadius:
-                                              const BorderRadius.only(
-                                            topLeft: Radius.circular(14),
-                                            bottomLeft:
-                                                Radius.circular(14),
-                                          ),
-                                        ),
+                                    ),
+                                    Text(
+                                      monthsShort[s.month - 1],
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF94A3B8),
                                       ),
-                                      const SizedBox(width: 12),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Text(
-                                            '${s.day}',
-                                            style: TextStyle(
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.w800,
-                                              color: isPending
-                                                  ? AppColors.primary
-                                                  : AppColors.primary,
-                                            ),
-                                          ),
-                                          Text(
-                                            monthsShort[s.month - 1],
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                              color: Color(0xFF94A3B8),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Container(
-                                          width: 1,
-                                          height: 44,
-                                          color:
-                                              const Color(0xFFF0F0F0)),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Padding(
-                                          padding:
-                                              const EdgeInsets.symmetric(
-                                                  vertical: 12),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  Expanded(
-                                                    child: Text(
-                                                      c.title,
-                                                      style: const TextStyle(
-                                                        fontSize: 13,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                        color: Color(
-                                                            0xFF111111),
-                                                      ),
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow
-                                                          .ellipsis,
-                                                    ),
-                                                  ),
-                                                  Container(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 7,
-                                                        vertical: 3),
-                                                    decoration: BoxDecoration(
-                                                      color: statusBg,
-                                                      borderRadius:
-                                                          BorderRadius
-                                                              .circular(
-                                                                  20),
-                                                    ),
-                                                    child: Text(
-                                                      statusLabel,
-                                                      style: TextStyle(
-                                                        fontSize: 10,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                        color: statusColor,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 12),
-                                                ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(width: 12),
+                                Container(
+                                    width: 1,
+                                    height: 44,
+                                    color: const Color(0xFFF0F0F0)),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                c.title,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight:
+                                                      FontWeight.w700,
+                                                  color:
+                                                      Color(0xFF111111),
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow
+                                                    .ellipsis,
                                               ),
-                                              const SizedBox(height: 4),
-                                              Row(
-                                                children: [
-                                                  Icon(
-                                                      Icons
-                                                          .access_time_outlined,
-                                                      size: 12,
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets
+                                                  .symmetric(
+                                                  horizontal: 7,
+                                                  vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: statusBg,
+                                                borderRadius:
+                                                    BorderRadius
+                                                        .circular(20),
+                                              ),
+                                              child: Text(
+                                                statusLabel,
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight:
+                                                      FontWeight.w700,
+                                                  color: statusColor,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Icon(
+                                                Icons
+                                                    .access_time_outlined,
+                                                size: 12,
+                                                color: AppColors
+                                                    .textSecondary),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              time,
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: AppColors
+                                                      .textSecondary),
+                                            ),
+                                            if (venue != null &&
+                                                venue.isNotEmpty) ...[
+                                              const SizedBox(width: 10),
+                                              Icon(
+                                                  Icons
+                                                      .location_on_outlined,
+                                                  size: 12,
+                                                  color: AppColors
+                                                      .textSecondary),
+                                              const SizedBox(width: 3),
+                                              Expanded(
+                                                child: Text(
+                                                  venue,
+                                                  style: TextStyle(
+                                                      fontSize: 11,
                                                       color: AppColors
                                                           .textSecondary),
-                                                  const SizedBox(width: 3),
-                                                  Text(
-                                                    time,
-                                                    style: TextStyle(
-                                                        fontSize: 11,
-                                                        color: AppColors
-                                                            .textSecondary),
-                                                  ),
-                                                  if (venue != null &&
-                                                      venue.isNotEmpty) ...[
-                                                    const SizedBox(
-                                                        width: 10),
-                                                    Icon(
-                                                        Icons
-                                                            .location_on_outlined,
-                                                        size: 12,
-                                                        color: AppColors
-                                                            .textSecondary),
-                                                    const SizedBox(width: 3),
-                                                    Expanded(
-                                                      child: Text(
-                                                        venue,
-                                                        style: TextStyle(
-                                                            fontSize: 11,
-                                                            color: AppColors
-                                                                .textSecondary),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ],
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow
+                                                      .ellipsis,
+                                                ),
                                               ),
                                             ],
-                                          ),
+                                          ],
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                );
-                              }),
-                            ],
+                                ),
+                              ],
+                            ),
                           );
-                        }).toList(),
+                        },
                       ),
                     ),
         ),
       ],
     );
   }
+
+  String _dayKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   Widget _buildTrainerProfileTab() {
     final auth = widget.auth;
@@ -1701,6 +1840,8 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            _buildBankingSection(),
+            const SizedBox(height: 16),
             _buildQualificationsSection(),
             const SizedBox(height: 16),
             _buildComplianceSection(),
@@ -1723,6 +1864,321 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBankingSection() {
+    final b = _bankingDetails;
+    final hasData = !b.isEmpty;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFF0F0F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Banking Details',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF111111)),
+                ),
+              ),
+              if (hasData) ...[
+                GestureDetector(
+                  onTap: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Remove Banking Details'),
+                        content: const Text(
+                            'Are you sure you want to remove your banking details?'),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Cancel')),
+                          TextButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Remove',
+                                  style: TextStyle(
+                                      color: AppColors.primary))),
+                        ],
+                      ),
+                    );
+                    if (confirm == true) {
+                      final uid = widget.auth.user?.uid ?? '';
+                      await _profileService.clearBankingDetails(uid);
+                      await _load();
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: const Text(
+                      'Remove',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              GestureDetector(
+                onTap: _showEditBankingSheet,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    hasData ? 'Edit' : '+ Add',
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (!hasData)
+            Text(
+              'Add your bank account details for payment processing.',
+              style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                  height: 1.5),
+            )
+          else ...[
+            if (b.accountHolderName?.isNotEmpty == true)
+              _bankRow('Account Name', b.accountHolderName!),
+            if (b.bankName?.isNotEmpty == true)
+              _bankRow('Bank', b.bankName!),
+            if (b.accountNumber?.isNotEmpty == true)
+              _bankRow('Account No.', _maskCardNumber(b.accountNumber!)),
+            if (b.sortCode?.isNotEmpty == true)
+              _bankRow('Sort Code', '•••'),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _bankRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(label,
+                style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF94A3B8),
+                    fontWeight: FontWeight.w600)),
+          ),
+          Expanded(
+            child: Text(value,
+                style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E293B))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _maskAccount(String account) {
+    if (account.length <= 4) return account;
+    return '${'•' * (account.length - 4)}${account.substring(account.length - 4)}';
+  }
+
+  String _maskCardNumber(String number) {
+    final digits = number.replaceAll(' ', '');
+    final last4 = digits.length >= 4
+        ? digits.substring(digits.length - 4)
+        : digits;
+    const total = 16;
+    final dots = '•' * (total - last4.length);
+    return '$dots$last4';
+  }
+
+  Future<void> _showEditBankingSheet() async {
+    final b = _bankingDetails;
+    final holderCtrl = TextEditingController(text: b.accountHolderName ?? '');
+    final bankCtrl = TextEditingController(text: b.bankName ?? '');
+    final accountCtrl = TextEditingController(text: b.accountNumber ?? '');
+    final sortCtrl = TextEditingController(text: b.sortCode ?? '');
+    bool saving = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => Padding(
+          padding: EdgeInsets.fromLTRB(
+              20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Banking Details',
+                  style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.text),
+                ),
+                const SizedBox(height: 16),
+                _bankField(holderCtrl, 'Account Holder Name',
+                    Icons.person_outline),
+                const SizedBox(height: 12),
+                _bankField(
+                    bankCtrl, 'Bank Name', Icons.account_balance_outlined),
+                const SizedBox(height: 12),
+                _bankField(accountCtrl, 'Account Number (16 digits)',
+                    Icons.credit_card_outlined,
+                    keyboardType: TextInputType.number,
+                    maxLength: 16,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+                const SizedBox(height: 12),
+                _bankField(sortCtrl, 'Sort Code (3 digits)',
+                    Icons.tag_outlined,
+                    keyboardType: TextInputType.number,
+                    maxLength: 3,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            final accountDigits =
+                                accountCtrl.text.trim();
+                            final sortDigits = sortCtrl.text.trim();
+                            if (accountDigits.isNotEmpty &&
+                                accountDigits.length != 16) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        'Account number must be exactly 16 digits')),
+                              );
+                              return;
+                            }
+                            if (sortDigits.isNotEmpty &&
+                                sortDigits.length != 3) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        'Sort code must be exactly 3 digits')),
+                              );
+                              return;
+                            }
+                            setSheet(() => saving = true);
+                            final uid = widget.auth.user?.uid ?? '';
+                            await _profileService.setBankingDetails(
+                              uid,
+                              BankingDetails(
+                                accountHolderName:
+                                    holderCtrl.text.trim(),
+                                bankName: bankCtrl.text.trim(),
+                                accountNumber: accountDigits,
+                                sortCode: sortDigits,
+                              ),
+                            );
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            await _load();
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding:
+                          const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white))
+                        : const Text('Save',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _bankField(
+    TextEditingController ctrl,
+    String label,
+    IconData icon, {
+    TextInputType keyboardType = TextInputType.text,
+    int? maxLength,
+    List<TextInputFormatter>? inputFormatters,
+  }) {
+    return TextField(
+      controller: ctrl,
+      keyboardType: keyboardType,
+      maxLength: maxLength,
+      inputFormatters: inputFormatters,
+      decoration: InputDecoration(
+        counterText: '',
+        labelText: label,
+        prefixIcon: Icon(icon, color: AppColors.primary, size: 20),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+        labelStyle:
+            const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
       ),
     );
   }
@@ -3473,12 +3929,12 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => PaperworkScreen(
-            courseId: course.id,
-            courseNumber: course.courseNumber,
-            courseTitle: course.title,
-            trainingCompanyId: widget.auth.trainingCompanyId ?? '',
+          builder: (_) => TrainerCourseDetailScreen(
+            course: course,
             trainerId: widget.auth.user?.uid ?? '',
+            venueName: course.venueId != null
+                ? _venueNames[course.venueId]
+                : null,
           ),
         ),
       ),
@@ -4239,6 +4695,184 @@ class _NotificationBell extends StatelessWidget {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Trainer Month Calendar ───────────────────────────────────────────────────
+
+class TrainerMonthCalendar extends StatelessWidget {
+  final DateTime focusedMonth;
+  final DateTime? selectedDay;
+  final Map<String, int> courseCountByDayKey;
+  final ValueChanged<DateTime> onDaySelected;
+
+  const TrainerMonthCalendar({
+    super.key,
+    required this.focusedMonth,
+    required this.selectedDay,
+    required this.courseCountByDayKey,
+    required this.onDaySelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final first = DateTime(focusedMonth.year, focusedMonth.month, 1);
+    final daysInMonth =
+        DateTime(focusedMonth.year, focusedMonth.month + 1, 0).day;
+    final leadingBlanks = first.weekday - 1; // Mon=1
+
+    const totalCells = 42;
+    final cells = List<DateTime?>.generate(totalCells, (i) {
+      final idx = i - leadingBlanks;
+      if (idx < 0 || idx >= daysInMonth) return null;
+      return DateTime(focusedMonth.year, focusedMonth.month, idx + 1);
+    });
+
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: weekdays
+                .map((w) => Expanded(
+                      child: Text(
+                        w,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 8),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: totalCells,
+            gridDelegate:
+                const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+            ),
+            itemBuilder: (context, i) {
+              final day = cells[i];
+              if (day == null) return const SizedBox.shrink();
+
+              final key =
+                  '${day.year.toString().padLeft(4, '0')}-'
+                  '${day.month.toString().padLeft(2, '0')}-'
+                  '${day.day.toString().padLeft(2, '0')}';
+              final count = courseCountByDayKey[key] ?? 0;
+              final isSelected = selectedDay != null &&
+                  selectedDay!.year == day.year &&
+                  selectedDay!.month == day.month &&
+                  selectedDay!.day == day.day;
+              final isToday = day == today;
+
+              Color? bgColor;
+              Border? border;
+              Color textColor;
+
+              if (isSelected) {
+                bgColor = AppColors.primary;
+                border = null;
+                textColor = Colors.white;
+              } else if (isToday) {
+                bgColor = AppColors.primary.withValues(alpha: 0.12);
+                border = Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.4),
+                    width: 1.2);
+                textColor = AppColors.primary;
+              } else {
+                bgColor = null;
+                border = null;
+                textColor = const Color(0xFF374151);
+              }
+
+              return GestureDetector(
+                onTap: () => onDaySelected(day),
+                child: Center(
+                  child: SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: bgColor,
+                            borderRadius: BorderRadius.circular(10),
+                            border: border,
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            '${day.day}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: textColor,
+                            ),
+                          ),
+                        ),
+                        if (count > 0)
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: count > 1 ? 14 : 8,
+                              height: count > 1 ? 14 : 8,
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? Colors.white
+                                    : AppColors.primary,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              alignment: Alignment.center,
+                              child: count > 1
+                                  ? Text(
+                                      '$count',
+                                      style: TextStyle(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.w800,
+                                        color: isSelected
+                                            ? AppColors.primary
+                                            : Colors.white,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );

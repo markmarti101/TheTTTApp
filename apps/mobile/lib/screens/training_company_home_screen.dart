@@ -24,6 +24,7 @@ import 'resources_screen.dart';
 import 'reports_screen.dart';
 import 'invoices_screen.dart';
 import 'notifications_screen.dart';
+import 'company_profile_screen.dart';
 import '../services/notification_service.dart';
 
 enum _CalendarView { month, week, day, byTrainer }
@@ -503,15 +504,24 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
   }
 
   Widget _userInitialsAvatar(AuthProvider auth) {
-    return CircleAvatar(
-      backgroundColor: AppColors.primary,
-      radius: 22,
-      child: Text(
-        _resolveInitials(auth),
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w800,
-          fontSize: 14,
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              CompanyProfileScreen(companyId: _companyId ?? ''),
+        ),
+      ),
+      child: CircleAvatar(
+        backgroundColor: AppColors.primary,
+        radius: 22,
+        child: Text(
+          _resolveInitials(auth),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 14,
+          ),
         ),
       ),
     );
@@ -745,13 +755,13 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
           const SizedBox(height: 4),
           ListTile(
             leading: const Icon(Icons.logout_outlined,
-                color: Color(0xFFDC2626), size: 22),
+                color: AppColors.primary, size: 22),
             title: const Text(
               'Sign out',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFFDC2626),
+                color: Color(0xFF1C1C1C),
               ),
             ),
             horizontalTitleGap: 8,

@@ -1,12 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/theme.dart';
 import '../models/course.dart';
+import '../models/document.dart';
 import '../models/venue.dart';
 import '../providers/auth_provider.dart';
 import '../services/courses_service.dart';
+import '../services/document_service.dart';
 
 class ClientCourseDetailScreen extends StatefulWidget {
   final Course course;
@@ -32,6 +35,10 @@ class _ClientCourseDetailScreenState extends State<ClientCourseDetailScreen> {
   String? _poNumber;
   bool _settingPoNumber = false;
   final _coursesService = CoursesService();
+
+  // Documents
+  List<CourseDocument> _documents = [];
+  final _documentService = DocumentService();
 
   // Feedback state
   Map<String, dynamic>? _existingFeedback;
@@ -103,12 +110,24 @@ class _ClientCourseDetailScreenState extends State<ClientCourseDetailScreen> {
         }
       }
 
+      List<CourseDocument> documents = [];
+      try {
+        documents = await _documentService.getDocumentsByCourse(
+          widget.course.id,
+          clientId: widget.course.clientId,
+        );
+        documents.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      } catch (e) {
+        debugPrint('[ClientCourseDetail] documents error: $e');
+      }
+
       if (mounted) {
         setState(() {
           _trainerDisplay = trainerDisplay;
           _venue = venue;
           _existingFeedback = existingFeedback;
           _poNumber = widget.course.poNumber;
+          _documents = documents;
           _loading = false;
         });
       }
@@ -268,11 +287,102 @@ class _ClientCourseDetailScreenState extends State<ClientCourseDetailScreen> {
             const SizedBox(height: 12),
             _buildNotesCard(course.notes!),
           ],
+          const SizedBox(height: 12),
+          _buildDocumentsCard(),
           if (course.status == 'completed') ...[
             const SizedBox(height: 24),
             _buildPostCourseSection(course),
           ],
         ],
+      ),
+    );
+  }
+
+  // ── Documents ────────────────────────────────────────────────────────────────
+
+  Widget _buildDocumentsCard() {
+    return _InfoCard(
+      title: 'Documents',
+      children: _documents.isEmpty
+          ? [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    Icon(Icons.folder_open_outlined,
+                        size: 18, color: const Color(0xFFCBD5E1)),
+                    const SizedBox(width: 10),
+                    Text(
+                      'No documents uploaded yet',
+                      style: TextStyle(
+                          fontSize: 13, color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ]
+          : _documents.map((doc) => _buildDocumentRow(doc)).toList(),
+    );
+  }
+
+  Widget _buildDocumentRow(CourseDocument doc) {
+    final typeLabel = DocumentType.label(doc.type);
+    final icon = switch (doc.type) {
+      'pre_course_pack' => Icons.menu_book_outlined,
+      'attendance_sheet' => Icons.checklist_outlined,
+      'sign_in_sheet' => Icons.edit_note_outlined,
+      'evaluation_form' => Icons.rate_review_outlined,
+      'venue_details' => Icons.location_on_outlined,
+      _ => Icons.insert_drive_file_outlined,
+    };
+
+    return InkWell(
+      onTap: () async {
+        final uri = Uri.tryParse(doc.downloadUrl);
+        if (uri != null && await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(icon, size: 18, color: AppColors.primary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    doc.fileName,
+                    style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1E293B)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    typeLabel,
+                    style: const TextStyle(
+                        fontSize: 11, color: Color(0xFF94A3B8)),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.open_in_new,
+                size: 16, color: Color(0xFFCBD5E1)),
+          ],
+        ),
       ),
     );
   }

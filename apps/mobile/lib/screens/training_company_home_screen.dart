@@ -24,6 +24,7 @@ import 'resources_screen.dart';
 import 'reports_screen.dart';
 import 'invoices_screen.dart';
 import 'notifications_screen.dart';
+import 'audit_trail_screen.dart';
 import 'company_profile_screen.dart';
 import '../services/notification_service.dart';
 
@@ -61,7 +62,6 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
 
   /// All courses returned for the company (used for dashboard metrics & upcoming week).
   List<Course> _allCourses = [];
-  List<Course> _monthCourses = [];
   List<Venue> _venues = [];
   int _activeTrainers = 0;
   int _activeClients = 0;
@@ -70,12 +70,26 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
   _CalendarView _calendarView = _CalendarView.month;
   List<UserSummary> _trainers = [];
 
+  String? _calendarStatusFilter; // null=All, 'pending', 'confirmed', 'completed'
+  final _calendarSearchController = TextEditingController();
+  String _calendarSearchQuery = '';
+
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
     _focusedMonth = DateTime(now.year, now.month, 1);
     _selectedDay = now;
+    _calendarSearchController.addListener(() {
+      setState(() => _calendarSearchQuery =
+          _calendarSearchController.text.trim().toLowerCase());
+    });
+  }
+
+  @override
+  void dispose() {
+    _calendarSearchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -144,7 +158,6 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
       setState(() {
         _loadingMonth = false;
         _allCourses = [];
-        _monthCourses = [];
         _venues = [];
         _userDisplayName = null;
       });
@@ -187,15 +200,9 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
       }
       final companyName = _parseCompanyName(companyDoc);
 
-      final filtered = allCourses.where((c) {
-        return c.startDate.year == _focusedMonth.year &&
-            c.startDate.month == _focusedMonth.month;
-      }).toList()..sort((a, b) => a.startDate.compareTo(b.startDate));
-
       setState(() {
         _allCourses = allCourses;
         _venues = venues;
-        _monthCourses = filtered;
         _companyName = companyName;
         _userDisplayName = userDisplayName;
         _activeClients = clients.length;
@@ -208,7 +215,6 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
       setState(() {
         _loadingMonth = false;
         _allCourses = [];
-        _monthCourses = [];
         _venues = [];
         _activeClients = 0;
         _activeTrainers = 0;
@@ -220,6 +226,42 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
   }
 
   Map<String, Venue> get _venuesById => {for (final v in _venues) v.id: v};
+
+  List<Course> get _filteredCalendarCourses {
+    var courses = _allCourses;
+    if (_calendarStatusFilter != null) {
+      courses = courses.where((c) {
+        switch (_calendarStatusFilter) {
+          case 'pending':
+            return _courseIsPendingStatus(c);
+          case 'confirmed':
+            return !_courseIsPendingStatus(c) &&
+                c.status != 'completed' &&
+                c.status != 'declined' &&
+                c.status != 'trainer_declined';
+          case 'completed':
+            return c.status == 'completed';
+          default:
+            return true;
+        }
+      }).toList();
+    }
+    if (_calendarSearchQuery.isNotEmpty) {
+      courses = courses
+          .where((c) => c.title.toLowerCase().contains(_calendarSearchQuery))
+          .toList();
+    }
+    return courses;
+  }
+
+  List<Course> get _filteredMonthCourses {
+    return _filteredCalendarCourses
+        .where((c) =>
+            c.startDate.year == _focusedMonth.year &&
+            c.startDate.month == _focusedMonth.month)
+        .toList()
+      ..sort((a, b) => a.startDate.compareTo(b.startDate));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -751,6 +793,15 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
                     builder: (_) =>
                         ReportsScreen(companyId: _companyId ?? ''))),
           ),
+          drawerItem(
+            icon: Icons.history_outlined,
+            label: 'Audit Trail',
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) =>
+                        AuditTrailScreen(companyId: _companyId ?? ''))),
+          ),
           const Divider(height: 1, color: Color(0xFFF0F0F0)),
           const SizedBox(height: 4),
           ListTile(
@@ -808,8 +859,88 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
     return Column(
       children: [
         _buildCalendarViewToggle(),
+        _buildCalendarFilterBar(),
         Expanded(child: _buildCalendarBody()),
       ],
+    );
+  }
+
+  Widget _buildCalendarFilterBar() {
+    const labels = ['All', 'Pending', 'Confirmed', 'Completed'];
+    const keys = [null, 'pending', 'confirmed', 'completed'];
+
+    return Container(
+      color: AppColors.background,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Column(
+        children: [
+          SizedBox(
+            height: 34,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: labels.length,
+              separatorBuilder: (context, i) => const SizedBox(width: 8),
+              itemBuilder: (_, i) {
+                final isSelected = _calendarStatusFilter == keys[i];
+                return GestureDetector(
+                  onTap: () =>
+                      setState(() => _calendarStatusFilter = keys[i]),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.primary
+                          : const Color(0xFFEFF0F3),
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                    child: Text(
+                      labels[i],
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isSelected
+                            ? Colors.white
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            height: 38,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F6FA),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TextField(
+              controller: _calendarSearchController,
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'Search courses...',
+                hintStyle: const TextStyle(
+                    color: Color(0xFFB0B8C1), fontSize: 13),
+                prefixIcon: const Icon(Icons.search,
+                    color: Color(0xFFB0B8C1), size: 18),
+                suffixIcon: _calendarSearchQuery.isNotEmpty
+                    ? GestureDetector(
+                        onTap: () => _calendarSearchController.clear(),
+                        child: const Icon(Icons.close,
+                            color: Color(0xFFB0B8C1), size: 18),
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
     );
   }
 
@@ -1538,7 +1669,7 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
     final weekDays =
         List.generate(7, (i) => weekStart.add(Duration(days: i)));
 
-    final selectedDayCourses = _allCourses
+    final selectedDayCourses = _filteredCalendarCourses
         .where((c) => _isSameDay(c.startDate, _selectedDay))
         .toList()
       ..sort((a, b) => a.startDate.compareTo(b.startDate));
@@ -1632,7 +1763,7 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
           final isSelected = _isSameDay(day, _selectedDay);
           final isToday = day == today;
           final courseCount =
-              _allCourses.where((c) => _isSameDay(c.startDate, day)).length;
+              _filteredCalendarCourses.where((c) => _isSameDay(c.startDate, day)).length;
 
           return Expanded(
             child: GestureDetector(
@@ -1709,7 +1840,7 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    final dayCourses = _allCourses
+    final dayCourses = _filteredCalendarCourses
         .where((c) => _isSameDay(c.startDate, _selectedDay))
         .toList()
       ..sort((a, b) => a.startDate.compareTo(b.startDate));
@@ -1791,7 +1922,7 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
     };
 
     final grouped = <String, List<Course>>{};
-    for (final c in _allCourses) {
+    for (final c in _filteredCalendarCourses) {
       grouped.putIfAbsent(c.trainerId, () => []).add(c);
     }
     for (final list in grouped.values) {
@@ -1883,14 +2014,15 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
   }
 
   Widget _buildMonthBody({required bool showUpcomingList}) {
+    final monthCourses = _filteredMonthCourses;
     // Count courses per day for the badge
     final courseCountByDay = <String, int>{};
-    for (final c in _monthCourses) {
+    for (final c in monthCourses) {
       final key = _dayKey(c.startDate);
       courseCountByDay[key] = (courseCountByDay[key] ?? 0) + 1;
     }
 
-    final selectedDayCourses = _monthCourses
+    final selectedDayCourses = monthCourses
         .where((c) => _isSameDay(c.startDate, _selectedDay))
         .toList()
       ..sort((a, b) => a.startDate.compareTo(b.startDate));
@@ -1934,10 +2066,10 @@ class _TrainingCompanyHomeScreenState extends State<TrainingCompanyHomeScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            if (_monthCourses.isEmpty)
+            if (monthCourses.isEmpty)
               _buildNoCoursesTile('No courses scheduled for this month.')
             else
-              ..._monthCourses.map(_buildCourseCard),
+              ...monthCourses.map(_buildCourseCard),
           ],
         ],
       ),

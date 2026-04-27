@@ -941,6 +941,10 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
   bool _showAllCpd = false;
   int _unreadNotifCount = 0;
   BankingDetails _bankingDetails = BankingDetails();
+  Map<String, bool> _availability = {};
+  bool _calendarShowAvailability = false;
+  double? _dayRate;
+  bool _earningsViewQuarterly = false;
 
   late DateTime _focusedMonth;
   DateTime? _selectedDay;
@@ -1028,6 +1032,20 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
         bankingDetails = await _profileService.getBankingDetails(uid);
       } catch (_) {}
 
+      Map<String, bool> availability = {};
+      try {
+        availability = await _profileService.getAvailability(uid);
+      } catch (_) {}
+
+      double? dayRate;
+      final rateCompanyId = widget.auth.trainingCompanyId;
+      if (rateCompanyId != null && rateCompanyId.isNotEmpty) {
+        try {
+          final rate = await _profileService.getTrainerRate(rateCompanyId, uid);
+          dayRate = rate?.dayRate;
+        } catch (_) {}
+      }
+
       if (mounted) {
         setState(() {
           _allCourses = courses;
@@ -1040,6 +1058,8 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
           _pendingCompanyInvites = pendingCompanyInvites;
           _unreadNotifCount = unreadCount;
           _bankingDetails = bankingDetails;
+          _availability = availability;
+          _dayRate = dayRate;
           _loading = false;
         });
       }
@@ -1167,6 +1187,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
           children: [
             _buildJobsTab(),
             _buildTrainerCalendarTab(),
+            _buildEarningsTab(),
             _buildTrainerProfileTab(),
           ],
         ),
@@ -1198,6 +1219,11 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
             icon: Icon(Icons.calendar_today_outlined),
             activeIcon: Icon(Icons.calendar_today),
             label: 'Calendar',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart_outlined),
+            activeIcon: Icon(Icons.bar_chart),
+            label: 'Earnings',
           ),
           const BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
@@ -1285,6 +1311,34 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
           ),
         ),
         const SizedBox(height: 12),
+        // Mode toggle: Schedule | Availability
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                _calendarToggleBtn('My Schedule', !_calendarShowAvailability, () {
+                  setState(() {
+                    _calendarShowAvailability = false;
+                    _selectedDay = null;
+                  });
+                }),
+                _calendarToggleBtn('Availability', _calendarShowAvailability, () {
+                  setState(() {
+                    _calendarShowAvailability = true;
+                    _selectedDay = null;
+                  });
+                }),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
         // Month navigation header
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1363,17 +1417,58 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
               : TrainerMonthCalendar(
                   focusedMonth: _focusedMonth,
                   selectedDay: _selectedDay,
-                  courseCountByDayKey: courseCountByKey,
-                  onDaySelected: (day) => setState(() {
-                    if (_selectedDay != null && _isSameDay(_selectedDay!, day)) {
-                      _selectedDay = null;
+                  courseCountByDayKey:
+                      _calendarShowAvailability ? {} : courseCountByKey,
+                  availabilityByDayKey:
+                      _calendarShowAvailability ? _availability : null,
+                  onDaySelected: (day) {
+                    if (_calendarShowAvailability) {
+                      _toggleAvailDay(day);
                     } else {
-                      _selectedDay = day;
+                      setState(() {
+                        if (_selectedDay != null &&
+                            _isSameDay(_selectedDay!, day)) {
+                          _selectedDay = null;
+                        } else {
+                          _selectedDay = day;
+                        }
+                      });
                     }
-                  }),
+                  },
                 ),
         ),
         const SizedBox(height: 16),
+        if (_calendarShowAvailability) ...[
+          // Availability legend
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                _availLegendDot(const Color(0xFF22C55E)),
+                const SizedBox(width: 6),
+                const Text('Available',
+                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                const SizedBox(width: 16),
+                _availLegendDot(const Color(0xFFEF4444)),
+                const SizedBox(width: 6),
+                const Text('Unavailable',
+                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Text(
+              'Tap a day to cycle: unset → available → unavailable',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary.withValues(alpha: 0.7),
+              ),
+            ),
+          ),
+          const Spacer(),
+        ] else ...[
         // List section label
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1624,6 +1719,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
                       ),
                     ),
         ),
+        ], // end else (schedule mode)
       ],
     );
   }
@@ -1635,6 +1731,63 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
 
   bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
+
+  Future<void> _toggleAvailDay(DateTime day) async {
+    final uid = widget.auth.user?.uid ?? '';
+    if (uid.isEmpty) return;
+    final key = _dayKey(day);
+    final current = _availability[key];
+    if (current == null) {
+      await _profileService.setAvailabilityDay(uid, key, true);
+      setState(() => _availability[key] = true);
+    } else if (current == true) {
+      await _profileService.setAvailabilityDay(uid, key, false);
+      setState(() => _availability[key] = false);
+    } else {
+      await _profileService.clearAvailabilityDay(uid, key);
+      setState(() => _availability.remove(key));
+    }
+  }
+
+  Widget _calendarToggleBtn(
+      String label, bool active, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: active ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1))
+                  ]
+                : null,
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: active ? AppColors.text : AppColors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _availLegendDot(Color color) => Container(
+        width: 10,
+        height: 10,
+        decoration:
+            BoxDecoration(color: color, shape: BoxShape.circle),
+      );
 
   Widget _buildTrainerProfileTab() {
     final auth = widget.auth;
@@ -1863,6 +2016,282 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEarningsTab() {
+    const monthNames = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+
+    final earned = _allCourses
+        .where((c) => c.status == 'confirmed' || c.status == 'completed')
+        .toList();
+
+    final Map<String, List<Course>> byMonth = {};
+    for (final c in earned) {
+      final k =
+          '${c.startDate.year}-${c.startDate.month.toString().padLeft(2, '0')}';
+      byMonth.putIfAbsent(k, () => []).add(c);
+    }
+    final sortedMonths = byMonth.keys.toList()..sort((a, b) => b.compareTo(a));
+
+    final now = DateTime.now();
+    final int currentCount;
+    final String currentLabel;
+    if (_earningsViewQuarterly) {
+      final qStartMonth = ((now.month - 1) ~/ 3) * 3 + 1;
+      final qStart = DateTime(now.year, qStartMonth, 1);
+      currentCount = earned
+          .where((c) =>
+              !c.startDate.isBefore(qStart) &&
+              c.startDate.isBefore(DateTime(now.year, now.month + 1, 1)))
+          .length;
+      currentLabel = 'This Quarter';
+    } else {
+      currentCount = earned
+          .where((c) =>
+              c.startDate.year == now.year && c.startDate.month == now.month)
+          .length;
+      currentLabel = 'This Month';
+    }
+    final double? currentEarnings =
+        _dayRate != null ? currentCount * _dayRate! : null;
+
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 16, 0),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Earnings',
+                    style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.text),
+                  ),
+                ),
+                // Period toggle
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _periodBtn('Monthly', !_earningsViewQuarterly,
+                          () => setState(() => _earningsViewQuarterly = false)),
+                      _periodBtn('Quarterly', _earningsViewQuarterly,
+                          () => setState(() => _earningsViewQuarterly = true)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Summary card
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF2DB89E), Color(0xFF1A9980)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    currentLabel,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withValues(alpha: 0.8)),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    currentEarnings != null
+                        ? '£${currentEarnings.toStringAsFixed(0)}'
+                        : '$currentCount course${currentCount == 1 ? '' : 's'}',
+                    style: const TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    currentEarnings != null
+                        ? '$currentCount course${currentCount == 1 ? '' : 's'} · £${_dayRate!.toStringAsFixed(0)}/day'
+                        : 'Day rate not set — contact your company',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.white.withValues(alpha: 0.85)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Section label
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Text(
+              'BREAKDOWN',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.1,
+                color: AppColors.textSecondary.withValues(alpha: 0.85),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Breakdown list
+          Expanded(
+            child: _loading
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary))
+                : sortedMonths.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.payments_outlined,
+                                size: 40, color: Color(0xFFCCCCCC)),
+                            const SizedBox(height: 10),
+                            Text(
+                              'No confirmed courses yet',
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                        itemCount: sortedMonths.length,
+                        separatorBuilder: (context, i) =>
+                            const SizedBox(height: 8),
+                        itemBuilder: (context, i) {
+                          final key = sortedMonths[i];
+                          final parts = key.split('-');
+                          final year = int.parse(parts[0]);
+                          final month = int.parse(parts[1]);
+                          final courses = byMonth[key]!;
+                          final earnings = _dayRate != null
+                              ? courses.length * _dayRate!
+                              : null;
+
+                          return Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                  color: const Color(0xFFE8EDF2)),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.1),
+                                    borderRadius:
+                                        BorderRadius.circular(10),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    monthNames[month - 1],
+                                    style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.primary),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${monthNames[month - 1]} $year',
+                                        style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.text),
+                                      ),
+                                      Text(
+                                        '${courses.length} course${courses.length == 1 ? '' : 's'}',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.textSecondary),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  earnings != null
+                                      ? '£${earnings.toStringAsFixed(0)}'
+                                      : '—',
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.text),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _periodBtn(String label, bool active, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: active ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: active
+              ? [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 4)
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: active ? AppColors.text : AppColors.textSecondary,
+          ),
         ),
       ),
     );
@@ -4707,6 +5136,7 @@ class TrainerMonthCalendar extends StatelessWidget {
   final DateTime focusedMonth;
   final DateTime? selectedDay;
   final Map<String, int> courseCountByDayKey;
+  final Map<String, bool>? availabilityByDayKey;
   final ValueChanged<DateTime> onDaySelected;
 
   const TrainerMonthCalendar({
@@ -4714,6 +5144,7 @@ class TrainerMonthCalendar extends StatelessWidget {
     required this.focusedMonth,
     required this.selectedDay,
     required this.courseCountByDayKey,
+    this.availabilityByDayKey,
     required this.onDaySelected,
   });
 
@@ -4838,7 +5269,23 @@ class TrainerMonthCalendar extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (count > 0)
+                        if (availabilityByDayKey != null) ...[
+                          if (availabilityByDayKey!.containsKey(key))
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: availabilityByDayKey![key]!
+                                      ? const Color(0xFF22C55E)
+                                      : const Color(0xFFEF4444),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                        ] else if (count > 0) ...[
                           Positioned(
                             right: 0,
                             bottom: 0,
@@ -4866,6 +5313,7 @@ class TrainerMonthCalendar extends StatelessWidget {
                                   : null,
                             ),
                           ),
+                        ],
                       ],
                     ),
                   ),

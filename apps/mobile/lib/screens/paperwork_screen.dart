@@ -11,6 +11,7 @@ class PaperworkScreen extends StatefulWidget {
   final String courseTitle;
   final String trainingCompanyId;
   final String trainerId;
+  final String clientId;
 
   const PaperworkScreen({
     super.key,
@@ -19,6 +20,7 @@ class PaperworkScreen extends StatefulWidget {
     required this.courseTitle,
     required this.trainingCompanyId,
     required this.trainerId,
+    required this.clientId,
   });
 
   @override
@@ -57,6 +59,7 @@ class _PaperworkScreenState extends State<PaperworkScreen> {
         courseId: widget.courseId,
         courseNumber: widget.courseNumber,
         trainingCompanyId: widget.trainingCompanyId,
+        clientId: widget.clientId,
         uploadedBy: widget.trainerId,
         uploaderRole: 'freelance_trainer',
         type: type,

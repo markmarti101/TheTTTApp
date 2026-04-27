@@ -3,6 +3,394 @@ import '../core/theme.dart';
 import '../models/course_request.dart';
 import 'course_request_screen.dart';
 
+// ─── Request Detail Screen ────────────────────────────────────────────────────
+
+class _RequestDetailScreen extends StatelessWidget {
+  final CourseRequest request;
+  const _RequestDetailScreen({required this.request});
+
+  static const _months = [
+    'Jan','Feb','Mar','Apr','May','Jun',
+    'Jul','Aug','Sep','Oct','Nov','Dec'
+  ];
+
+  String _fmtDate(String iso) {
+    try {
+      final dt = DateTime.parse(iso);
+      return '${dt.day} ${_months[dt.month - 1]} ${dt.year}';
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  String _fmtSetup(String s) => switch (s) {
+        'classroom' => 'Classroom',
+        'theatre'   => 'Theatre',
+        'cabaret'   => 'Cabaret',
+        'boardroom' => 'Boardroom',
+        _           => s,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final r = request;
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Column(
+        children: [
+          // Teal gradient header — matches ClientCourseDetailScreen
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF2DB89E), Color(0xFF1A9980)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 16, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.arrow_back_ios_new,
+                              color: Colors.white, size: 18),
+                        ),
+                        Text(
+                          'Booking Request',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withValues(alpha: 0.8),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const Spacer(),
+                        _StatusChip(status: r.status),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 16),
+                      child: Text(
+                        r.title,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          height: 1.2,
+                        ),
+                      ),
+                    ),
+                    if (r.topic != null && r.topic!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16),
+                        child: Text(
+                          r.topic!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withValues(alpha: 0.75),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Body
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+              child: Column(
+                children: [
+                  // Dates card
+                  _ReqInfoCard(
+                    title: 'Dates',
+                    children: [
+                      _ReqInfoRow(
+                        icon: Icons.send_outlined,
+                        label: 'Submitted',
+                        value: _fmtDate(r.createdAt),
+                      ),
+                      if (r.preferredDates != null &&
+                          r.preferredDates!.isNotEmpty) ...[
+                        const _ReqDivider(),
+                        _ReqInfoRow(
+                          icon: Icons.event_outlined,
+                          label: 'Preferred',
+                          value: r.preferredDates!.map(_fmtDate).join(', '),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Booking details card
+                  if (r.delegateCount != null ||
+                      (r.poNumber != null && r.poNumber!.isNotEmpty) ||
+                      (r.venuePreference != null &&
+                          r.venuePreference!.isNotEmpty) ||
+                      (r.venueSetup != null && r.venueSetup!.isNotEmpty))
+                    _ReqInfoCard(
+                      title: 'Booking Details',
+                      children: [
+                        if (r.delegateCount != null)
+                          _ReqInfoRow(
+                            icon: Icons.people_outline,
+                            label: 'Delegates',
+                            value: '${r.delegateCount}',
+                          ),
+                        if (r.poNumber != null && r.poNumber!.isNotEmpty) ...[
+                          if (r.delegateCount != null) const _ReqDivider(),
+                          _ReqInfoRow(
+                            icon: Icons.confirmation_number_outlined,
+                            label: 'PO Number',
+                            value: r.poNumber!,
+                          ),
+                        ],
+                        if (r.venuePreference != null &&
+                            r.venuePreference!.isNotEmpty) ...[
+                          const _ReqDivider(),
+                          _ReqInfoRow(
+                            icon: Icons.location_on_outlined,
+                            label: 'Venue',
+                            value: r.venuePreference!,
+                          ),
+                        ],
+                        if (r.venueSetup != null &&
+                            r.venueSetup!.isNotEmpty) ...[
+                          const _ReqDivider(),
+                          _ReqInfoRow(
+                            icon: Icons.chair_outlined,
+                            label: 'Room Setup',
+                            value: _fmtSetup(r.venueSetup!),
+                          ),
+                        ],
+                      ],
+                    ),
+                  if (r.delegateCount != null ||
+                      (r.poNumber != null && r.poNumber!.isNotEmpty) ||
+                      (r.venuePreference != null &&
+                          r.venuePreference!.isNotEmpty) ||
+                      (r.venueSetup != null && r.venueSetup!.isNotEmpty))
+                    const SizedBox(height: 12),
+
+                  // Notes
+                  if (r.notes != null && r.notes!.isNotEmpty) ...[
+                    _ReqInfoCard(
+                      title: 'Notes',
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Text(r.notes!,
+                              style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF475569),
+                                  height: 1.5)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Catering
+                  if (r.cateringNotes != null &&
+                      r.cateringNotes!.isNotEmpty) ...[
+                    _ReqInfoCard(
+                      title: 'Catering Notes',
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Text(r.cateringNotes!,
+                              style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF475569),
+                                  height: 1.5)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Accessibility
+                  if (r.accessibilityNotes != null &&
+                      r.accessibilityNotes!.isNotEmpty) ...[
+                    _ReqInfoCard(
+                      title: 'Accessibility Notes',
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Text(r.accessibilityNotes!,
+                              style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF475569),
+                                  height: 1.5)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Decline reason
+                  if (r.status == 'declined' && r.declineReason != null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.info_outline,
+                              size: 16, color: Color(0xFFDC2626)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Decline Reason',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFFDC2626))),
+                                const SizedBox(height: 4),
+                                Text(r.declineReason!,
+                                    style: const TextStyle(
+                                        fontSize: 13,
+                                        color: Color(0xFFDC2626),
+                                        height: 1.4)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Mirrors _InfoCard / _InfoRow / _Divider from ClientCourseDetailScreen
+
+class _ReqInfoCard extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+  const _ReqInfoCard({required this.title, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF111111),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+            child: Column(children: children),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReqInfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _ReqInfoRow(
+      {required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: AppColors.primary),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 72,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF94A3B8),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF1E293B),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReqDivider extends StatelessWidget {
+  const _ReqDivider();
+  @override
+  Widget build(BuildContext context) =>
+      const Divider(height: 1, color: Color(0xFFF1F5F9));
+}
+
 /// Bookings tab — shows all of a client's course requests with filter chips.
 /// Used as a tab inside DashboardScreen's bottom nav.
 class ClientRequestsScreen extends StatefulWidget {
@@ -50,8 +438,16 @@ class _ClientRequestsScreenState extends State<ClientRequestsScreen> {
                           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                           physics: const AlwaysScrollableScrollPhysics(),
                           itemCount: _filtered.length,
-                          itemBuilder: (_, i) =>
-                              _RequestDetailCard(request: _filtered[i]),
+                          itemBuilder: (_, i) => GestureDetector(
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => _RequestDetailScreen(
+                                    request: _filtered[i]),
+                              ),
+                            ),
+                            child: _RequestDetailCard(request: _filtered[i]),
+                          ),
                         ),
                 ),
         ),

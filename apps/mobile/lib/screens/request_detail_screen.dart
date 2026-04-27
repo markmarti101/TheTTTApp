@@ -4,6 +4,7 @@ import '../core/theme.dart';
 import '../models/course_request.dart';
 import '../models/venue.dart';
 import '../providers/auth_provider.dart';
+import '../services/audit_log_service.dart';
 import '../services/requests_service.dart';
 import '../services/venues_service.dart';
 import '../services/trainers_service.dart';
@@ -135,6 +136,9 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
       return;
     }
 
+    final uid = context.read<AuthProvider>().user?.uid ?? '';
+    final companyId = _request?.trainingCompanyId ?? '';
+    final title = _request?.title ?? '';
     setState(() => _actionLoading = true);
     try {
       await _requestsService.approveRequest(
@@ -142,6 +146,13 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
         _trainerId,
         _scheduledAt!,
         venueId: _venueId.isEmpty ? null : _venueId,
+      );
+      await AuditLogService().log(
+        companyId: companyId,
+        action: 'request_approved',
+        description: 'Booking request approved — $title',
+        performedBy: uid,
+        entityId: widget.requestId,
       );
       if (mounted) {
         Navigator.pop(context);
@@ -169,9 +180,19 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
       return;
     }
 
+    final uid = context.read<AuthProvider>().user?.uid ?? '';
+    final companyId = _request?.trainingCompanyId ?? '';
+    final title = _request?.title ?? '';
     setState(() => _actionLoading = true);
     try {
       await _requestsService.declineRequest(widget.requestId, reason);
+      await AuditLogService().log(
+        companyId: companyId,
+        action: 'request_declined',
+        description: 'Booking request declined — $title',
+        performedBy: uid,
+        entityId: widget.requestId,
+      );
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(

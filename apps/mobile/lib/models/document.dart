@@ -3,6 +3,7 @@ class CourseDocument {
   final String courseId;
   final String courseNumber;
   final String trainingCompanyId;
+  final String clientId;
   final String uploadedBy;
   final String uploaderRole; // 'training_company' | 'freelance_trainer'
   final String type;
@@ -16,6 +17,7 @@ class CourseDocument {
     required this.courseId,
     required this.courseNumber,
     required this.trainingCompanyId,
+    required this.clientId,
     required this.uploadedBy,
     required this.uploaderRole,
     required this.type,
@@ -31,6 +33,7 @@ class CourseDocument {
         courseId: d['courseId'] as String? ?? '',
         courseNumber: d['courseNumber'] as String? ?? '',
         trainingCompanyId: d['trainingCompanyId'] as String? ?? '',
+        clientId: d['clientId'] as String? ?? '',
         uploadedBy: d['uploadedBy'] as String? ?? '',
         uploaderRole: d['uploaderRole'] as String? ?? '',
         type: d['type'] as String? ?? 'other',

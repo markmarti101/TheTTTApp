@@ -9,6 +9,7 @@ import '../models/document.dart';
 import '../models/invoice.dart';
 import '../models/venue.dart';
 import '../providers/auth_provider.dart';
+import '../services/audit_log_service.dart';
 import '../services/courses_service.dart';
 import '../services/document_service.dart';
 import '../services/invoice_service.dart';
@@ -165,10 +166,10 @@ class _CompanyCourseDetailScreenState
     );
 
     if (confirmed != true) return;
+    final uid = context.read<AuthProvider>().user?.uid ?? '';
     setState(() => _markingComplete = true);
     try {
       await _coursesService.markCourseCompleted(widget.courseId);
-      // Notify client and trainer
       final course = _course;
       if (course != null) {
         final notifs = NotificationService();
@@ -185,6 +186,13 @@ class _CompanyCourseDetailScreenState
           body: '"${course.title}" has been marked as completed.',
           type: 'course_completed',
           relatedId: widget.courseId,
+        );
+        await AuditLogService().log(
+          companyId: course.trainingCompanyId,
+          action: 'course_completed',
+          description: 'Course marked as completed — ${course.title}',
+          performedBy: uid,
+          entityId: widget.courseId,
         );
       }
       await _load();
@@ -297,11 +305,19 @@ class _CompanyCourseDetailScreenState
         courseId: course.id,
         courseNumber: course.courseNumber,
         trainingCompanyId: companyId,
+        clientId: course.clientId,
         uploadedBy: uid,
         uploaderRole: 'training_company',
         type: DocumentType.preCoursePackk,
       );
       if (doc != null && mounted) {
+        await AuditLogService().log(
+          companyId: companyId,
+          action: 'document_uploaded',
+          description: 'Document uploaded — ${doc.fileName}',
+          performedBy: uid,
+          entityId: course.id,
+        );
         await _load();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Pre-course pack uploaded.')),
@@ -469,6 +485,15 @@ class _CompanyCourseDetailScreenState
                         notes: notesController.text.trim().isEmpty
                             ? null
                             : notesController.text.trim(),
+                      );
+                      await AuditLogService().log(
+                        companyId: course.trainingCompanyId,
+                        action: 'invoice_created',
+                        description:
+                            'Invoice created — £${amt.toStringAsFixed(2)} for ${course.title}',
+                        performedBy:
+                            context.read<AuthProvider>().user?.uid ?? '',
+                        entityId: id,
                       );
                       await _load();
                       if (mounted) {

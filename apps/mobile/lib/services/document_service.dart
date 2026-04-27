@@ -16,6 +16,7 @@ class DocumentService {
     required String courseId,
     required String courseNumber,
     required String trainingCompanyId,
+    required String clientId,
     required String uploadedBy,
     required String uploaderRole,
     required String type,
@@ -50,6 +51,7 @@ class DocumentService {
       'courseId': courseId,
       'courseNumber': courseNumber,
       'trainingCompanyId': trainingCompanyId,
+      'clientId': clientId,
       'uploadedBy': uploadedBy,
       'uploaderRole': uploaderRole,
       'type': type,
@@ -64,6 +66,7 @@ class DocumentService {
       courseId: courseId,
       courseNumber: courseNumber,
       trainingCompanyId: trainingCompanyId,
+      clientId: clientId,
       uploadedBy: uploadedBy,
       uploaderRole: uploaderRole,
       type: type,
@@ -74,11 +77,17 @@ class DocumentService {
     );
   }
 
-  Future<List<CourseDocument>> getDocumentsByCourse(String courseId) async {
-    final snap = await _firestore
+  Future<List<CourseDocument>> getDocumentsByCourse(
+    String courseId, {
+    String? clientId,
+  }) async {
+    Query<Map<String, dynamic>> query = _firestore
         .collection('documents')
-        .where('courseId', isEqualTo: courseId)
-        .get();
+        .where('courseId', isEqualTo: courseId);
+    if (clientId != null && clientId.isNotEmpty) {
+      query = query.where('clientId', isEqualTo: clientId);
+    }
+    final snap = await query.get();
     return snap.docs
         .map((d) => CourseDocument.fromFirestore(d.id, d.data()))
         .toList();

@@ -16,7 +16,9 @@ class CompanyTrainersScreen extends StatefulWidget {
 
 class _CompanyTrainersScreenState extends State<CompanyTrainersScreen> {
   final _service = CompanyDirectoryService();
+  final _searchController = TextEditingController();
   List<UserSummary> _trainers = [];
+  List<UserSummary> _filtered = [];
   bool _loading = true;
   String? _error;
 
@@ -24,6 +26,25 @@ class _CompanyTrainersScreenState extends State<CompanyTrainersScreen> {
   void initState() {
     super.initState();
     _load();
+    _searchController.addListener(_onSearch);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearch() {
+    final q = _searchController.text.trim().toLowerCase();
+    setState(() {
+      _filtered = q.isEmpty
+          ? List.of(_trainers)
+          : _trainers.where((t) {
+              final name = (t.displayName ?? '').toLowerCase();
+              return name.contains(q) || t.email.toLowerCase().contains(q);
+            }).toList();
+    });
   }
 
   Future<void> _load() async {
@@ -46,8 +67,10 @@ class _CompanyTrainersScreenState extends State<CompanyTrainersScreen> {
       final result = await _service.getTrainers(companyId);
       setState(() {
         _trainers = result;
+        _filtered = List.of(result);
         _loading = false;
       });
+      _onSearch();
     } catch (e) {
       setState(() {
         _error = 'Failed to load trainers: $e';
@@ -98,20 +121,84 @@ class _CompanyTrainersScreenState extends State<CompanyTrainersScreen> {
                 )
               : _trainers.isEmpty
                   ? _buildEmptyState()
-                  : RefreshIndicator(
-                      color: AppColors.primary,
-                      onRefresh: _load,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                        itemCount: _trainers.length,
-                        itemBuilder: (context, index) {
-                          final t = _trainers[index];
-                          final name =
-                              t.displayName ?? t.email.split('@').first;
-                          return _buildTrainerCard(t, name);
-                        },
-                      ),
+                  : Column(
+                      children: [
+                        _buildSearchBar(),
+                        Expanded(
+                          child: _filtered.isEmpty
+                              ? Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.search_off,
+                                          size: 48,
+                                          color: Colors.grey.shade300),
+                                      const SizedBox(height: 12),
+                                      const Text(
+                                        'No trainers match your search',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF111111),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : RefreshIndicator(
+                                  color: AppColors.primary,
+                                  onRefresh: _load,
+                                  child: ListView.builder(
+                                    padding: const EdgeInsets.fromLTRB(
+                                        16, 8, 16, 32),
+                                    itemCount: _filtered.length,
+                                    itemBuilder: (context, index) {
+                                      final t = _filtered[index];
+                                      final name = t.displayName ??
+                                          t.email.split('@').first;
+                                      return _buildTrainerCard(t, name);
+                                    },
+                                  ),
+                                ),
+                        ),
+                      ],
                     ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: Container(
+        height: 42,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF5F6FA),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: TextField(
+          controller: _searchController,
+          style: const TextStyle(fontSize: 14),
+          decoration: InputDecoration(
+            hintText: 'Search trainers...',
+            hintStyle:
+                const TextStyle(color: Color(0xFFB0B8C1), fontSize: 14),
+            prefixIcon: const Icon(Icons.search,
+                color: Color(0xFFB0B8C1), size: 18),
+            suffixIcon: _searchController.text.isNotEmpty
+                ? GestureDetector(
+                    onTap: () {
+                      _searchController.clear();
+                      _onSearch();
+                    },
+                    child: const Icon(Icons.close,
+                        color: Color(0xFFB0B8C1), size: 18),
+                  )
+                : null,
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+          ),
+        ),
+      ),
     );
   }
 

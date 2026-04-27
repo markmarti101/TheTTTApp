@@ -376,6 +376,49 @@ class TrainerProfileService {
     });
   }
 
+  // ── Availability (trainer-owned) ──────────────────────────────────────────
+
+  Future<Map<String, bool>> getAvailability(String trainerId) async {
+    try {
+      final doc = await _firestore
+          .collection('trainer_profiles')
+          .doc(trainerId)
+          .get();
+      if (!doc.exists) return {};
+      final avail = doc.data()?['availability'] as Map<String, dynamic>?;
+      if (avail == null) return {};
+      return avail.map((k, v) => MapEntry(k, v as bool));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> setAvailabilityDay(
+      String trainerId, String dateStr, bool available) async {
+    final current = await getAvailability(trainerId);
+    current[dateStr] = available;
+    await _firestore
+        .collection('trainer_profiles')
+        .doc(trainerId)
+        .set({
+      'availability': current,
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> clearAvailabilityDay(
+      String trainerId, String dateStr) async {
+    final current = await getAvailability(trainerId);
+    current.remove(dateStr);
+    await _firestore
+        .collection('trainer_profiles')
+        .doc(trainerId)
+        .set({
+      'availability': current,
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+    }, SetOptions(merge: true));
+  }
+
   // ── Course notes (trainer-owned, per course) ──────────────────────────────
 
   Future<List<CourseNote>> getCourseNotes(

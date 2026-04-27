@@ -78,7 +78,7 @@ class _CompanyOnboardingStep2ScreenState
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to complete setup: $e')));
+        ).showSnackBar(const SnackBar(content: Text('Setup failed. Please try again.')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);

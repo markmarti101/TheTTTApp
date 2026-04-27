@@ -73,7 +73,7 @@ class _CompanyTrainersScreenState extends State<CompanyTrainersScreen> {
       _onSearch();
     } catch (e) {
       setState(() {
-        _error = 'Failed to load trainers: $e';
+        _error = 'Failed to load trainers. Please try again.';
         _loading = false;
       });
     }

@@ -96,7 +96,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = 'Failed to load profile. Please try again.';
         _loading = false;
       });
     }
@@ -137,7 +137,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save: $e')),
+        const SnackBar(content: Text('Failed to save. Please try again.')),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -159,7 +159,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: $e')),
+        const SnackBar(content: Text('Something went wrong. Please try again.')),
       );
     }
   }

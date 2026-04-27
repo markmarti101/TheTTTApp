@@ -43,7 +43,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = 'Failed to load invoice. Please try again.';
         _loading = false;
       });
     }
@@ -57,7 +57,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $e')),
+          const SnackBar(content: Text('Action failed. Please try again.')),
         );
       }
     } finally {
@@ -103,7 +103,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Failed: $e')));
+            .showSnackBar(const SnackBar(content: Text('Action failed. Please try again.')));
       }
       if (mounted) setState(() => _acting = false);
     }
@@ -296,7 +296,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('PDF failed: $e')),
+        const SnackBar(content: Text('PDF export failed. Please try again.')),
       );
     }
   }

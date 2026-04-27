@@ -5,20 +5,22 @@ import '../services/audit_log_service.dart';
 
 class AuditTrailScreen extends StatefulWidget {
   final String companyId;
-  const AuditTrailScreen({super.key, required this.companyId});
+  final AuditLogService? service;
+  const AuditTrailScreen({super.key, required this.companyId, this.service});
 
   @override
   State<AuditTrailScreen> createState() => _AuditTrailScreenState();
 }
 
 class _AuditTrailScreenState extends State<AuditTrailScreen> {
-  final _service = AuditLogService();
+  late final AuditLogService _service;
   List<AuditEntry> _entries = [];
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
+    _service = widget.service ?? AuditLogService();
     _load();
   }
 

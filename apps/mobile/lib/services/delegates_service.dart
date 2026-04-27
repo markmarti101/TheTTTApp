@@ -3,7 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/delegate.dart';
 
 class DelegatesService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore;
+  DelegatesService({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance;
 
   CollectionReference _ref(String clientId) => _firestore
       .collection('users')

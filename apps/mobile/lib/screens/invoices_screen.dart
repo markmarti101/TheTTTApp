@@ -70,7 +70,7 @@ class _InvoicesScreenState extends State<InvoicesScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = 'Failed to load invoices. Please try again.';
         _loading = false;
       });
     }

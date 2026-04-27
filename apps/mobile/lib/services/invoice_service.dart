@@ -1,9 +1,13 @@
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/invoice.dart';
 
 class InvoiceService {
-  final _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore;
+  InvoiceService({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance;
   static const _col = 'invoices';
 
   Future<String> createInvoice({
@@ -75,7 +79,8 @@ class InvoiceService {
 
   String _generateNumber() {
     final now = DateTime.now();
-    final suffix = now.millisecondsSinceEpoch.toString().substring(7);
-    return 'INV-${now.year}-$suffix';
+    final ms = now.millisecondsSinceEpoch.toString().substring(7);
+    final rand = Random().nextInt(9999).toString().padLeft(4, '0');
+    return 'INV-${now.year}-$ms$rand';
   }
 }

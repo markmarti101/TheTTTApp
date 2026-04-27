@@ -72,7 +72,7 @@ class _AddClientScreenState extends State<AddClientScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to add client: $e')));
+        ).showSnackBar(const SnackBar(content: Text('Failed to add client. Please try again.')));
       }
     } finally {
       if (mounted) {

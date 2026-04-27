@@ -73,7 +73,7 @@ class _PaperworkScreenState extends State<PaperworkScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
+          const SnackBar(content: Text('Upload failed. Please try again.')),
         );
       }
     } finally {
@@ -110,7 +110,7 @@ class _PaperworkScreenState extends State<PaperworkScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to remove: $e')),
+          const SnackBar(content: Text('Failed to remove. Please try again.')),
         );
       }
     }

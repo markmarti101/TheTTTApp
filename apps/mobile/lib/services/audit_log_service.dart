@@ -32,7 +32,9 @@ class AuditEntry {
 }
 
 class AuditLogService {
-  final _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore;
+  AuditLogService({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance;
 
   Future<void> log({
     required String companyId,

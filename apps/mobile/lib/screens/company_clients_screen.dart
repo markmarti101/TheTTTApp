@@ -50,7 +50,7 @@ class _CompanyClientsScreenState extends State<CompanyClientsScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = 'Failed to load clients: $e';
+        _error = 'Failed to load clients. Please try again.';
         _loading = false;
       });
     }

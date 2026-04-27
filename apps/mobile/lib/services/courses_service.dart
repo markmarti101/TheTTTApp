@@ -3,7 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/course.dart';
 
 class CoursesService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore;
+  CoursesService({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance;
 
   Future<List<Course>> getCoursesByCompanyOrdered(
     String trainingCompanyId, {

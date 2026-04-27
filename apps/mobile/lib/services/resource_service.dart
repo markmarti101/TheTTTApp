@@ -2,7 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/resource.dart';
 
 class ResourceService {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _db;
+  ResourceService({FirebaseFirestore? firestore})
+      : _db = firestore ?? FirebaseFirestore.instance;
 
   // ── Resources ────────────────────────────────────────────────────────────────
 

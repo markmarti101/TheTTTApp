@@ -119,7 +119,7 @@ class _CourseRequestScreenState extends State<CourseRequestScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to submit request: $e')),
+          const SnackBar(content: Text('Failed to submit request. Please try again.')),
         );
       }
     } finally {

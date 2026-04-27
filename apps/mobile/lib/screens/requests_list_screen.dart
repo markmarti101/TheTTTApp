@@ -51,7 +51,7 @@ class _RequestsListScreenState extends State<RequestsListScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = 'Failed to load requests. Please try again.';
         _loading = false;
       });
     }

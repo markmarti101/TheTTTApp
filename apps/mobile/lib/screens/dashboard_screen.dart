@@ -2497,10 +2497,10 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
                     maxLength: 16,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
                 const SizedBox(height: 12),
-                _bankField(sortCtrl, 'Sort Code (3 digits)',
+                _bankField(sortCtrl, 'Sort Code (6 digits)',
                     Icons.tag_outlined,
                     keyboardType: TextInputType.number,
-                    maxLength: 3,
+                    maxLength: 6,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
                 const SizedBox(height: 16),
                 SizedBox(
@@ -2522,11 +2522,11 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
                               return;
                             }
                             if (sortDigits.isNotEmpty &&
-                                sortDigits.length != 3) {
+                                sortDigits.length != 6) {
                               ScaffoldMessenger.of(ctx).showSnackBar(
                                 const SnackBar(
                                     content: Text(
-                                        'Sort code must be exactly 3 digits')),
+                                        'Sort code must be exactly 6 digits')),
                               );
                               return;
                             }
@@ -3334,7 +3334,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save DBS: $e')),
+          const SnackBar(content: Text('Failed to save DBS details. Please try again.')),
         );
       }
     }
@@ -3501,7 +3501,7 @@ class _FreelancerScreenState extends State<_FreelancerScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save insurance: $e')),
+          const SnackBar(content: Text('Failed to save insurance details. Please try again.')),
         );
       }
     }

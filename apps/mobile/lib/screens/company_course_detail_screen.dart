@@ -326,7 +326,7 @@ class _CompanyCourseDetailScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
+          const SnackBar(content: Text('Upload failed. Please try again.')),
         );
       }
     } finally {
@@ -511,7 +511,7 @@ class _CompanyCourseDetailScreenState
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                               content:
-                                  Text('Failed to create invoice: $e')),
+                                  const Text('Failed to create invoice. Please try again.')),
                         );
                       }
                     } finally {
@@ -546,7 +546,7 @@ class _CompanyCourseDetailScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to remove document: $e')),
+          const SnackBar(content: Text('Failed to remove document. Please try again.')),
         );
       }
     }

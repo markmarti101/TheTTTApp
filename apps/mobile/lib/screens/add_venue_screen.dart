@@ -72,7 +72,7 @@ class _AddVenueScreenState extends State<AddVenueScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to add venue: $e')),
+          const SnackBar(content: Text('Failed to add venue. Please try again.')),
         );
       }
     } finally {

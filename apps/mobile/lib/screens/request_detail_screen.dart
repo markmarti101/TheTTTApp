@@ -164,7 +164,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+        ).showSnackBar(const SnackBar(content: Text('Action failed. Please try again.')));
       }
     } finally {
       if (mounted) setState(() => _actionLoading = false);
@@ -203,7 +203,7 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+        ).showSnackBar(const SnackBar(content: Text('Action failed. Please try again.')));
       }
     } finally {
       if (mounted) setState(() => _actionLoading = false);

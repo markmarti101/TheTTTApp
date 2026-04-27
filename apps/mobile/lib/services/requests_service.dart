@@ -6,8 +6,11 @@ class RequestsService {
   static const _requests = 'course_requests';
   static const _courses = 'courses';
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final _notifs = NotificationService();
+  final FirebaseFirestore _firestore;
+  final NotificationService _notifs;
+  RequestsService({FirebaseFirestore? firestore, NotificationService? notifs})
+      : _firestore = firestore ?? FirebaseFirestore.instance,
+        _notifs = notifs ?? NotificationService();
 
   Future<List<CourseRequest>> getRequestsByCompany(String trainingCompanyId) async {
     final snap = await _firestore

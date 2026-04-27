@@ -8,8 +8,8 @@ typedef UserRole =
     String; // 'training_company' | 'freelance_trainer' | 'client'
 
 class AuthProvider extends ChangeNotifier {
-  final _invitesService = ClientInvitesService();
-  final _trainerInvitesService = TrainerInvitesService();
+  ClientInvitesService? _invitesService;
+  TrainerInvitesService? _trainerInvitesService;
   User? _user;
   UserRole? _role;
   String? _trainingCompanyId;
@@ -23,8 +23,12 @@ class AuthProvider extends ChangeNotifier {
   String? get error => _error;
   bool get isAuthenticated => _user != null && _role != null;
 
-  AuthProvider() {
-    _init();
+  AuthProvider({bool skipInit = false}) {
+    if (!skipInit) {
+      _invitesService = ClientInvitesService();
+      _trainerInvitesService = TrainerInvitesService();
+      _init();
+    }
   }
 
   void _init() {
@@ -64,7 +68,7 @@ class AuthProvider extends ChangeNotifier {
           (existing?['companyId'] as String?)?.isNotEmpty == true;
       if (alreadyLinked) return;
 
-      final invite = await _invitesService.claimInviteForEmail(
+      final invite = await _invitesService!.claimInviteForEmail(
         uid: uid,
         email: normalizedEmail,
       );
@@ -89,7 +93,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> acceptTrainerInvite(String inviteId, String companyId) async {
     final uid = _user?.uid;
     if (uid == null) return;
-    await _trainerInvitesService.acceptInvite(inviteId, uid);
+    await _trainerInvitesService!.acceptInvite(inviteId, uid);
     final now = DateTime.now().toUtc().toIso8601String();
     await FirebaseFirestore.instance.collection('users').doc(uid).set({
       'companyId': companyId,
@@ -247,6 +251,12 @@ class AuthProvider extends ChangeNotifier {
 
   void clearError() {
     _error = null;
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void setErrorForTest(String message) {
+    _error = message;
     notifyListeners();
   }
 

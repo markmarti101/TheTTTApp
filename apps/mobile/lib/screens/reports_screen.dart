@@ -64,7 +64,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = 'Failed to load report data. Please try again.';
         _loading = false;
       });
     }
@@ -377,7 +377,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('PDF export failed: $e')),
+        const SnackBar(content: Text('PDF export failed. Please try again.')),
       );
     }
   }

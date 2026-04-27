@@ -3,7 +3,9 @@ import '../models/app_notification.dart';
 
 class NotificationService {
   static const _col = 'notifications';
-  final _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _db;
+  NotificationService({FirebaseFirestore? firestore})
+      : _db = firestore ?? FirebaseFirestore.instance;
 
   Future<void> send({
     required String recipientId,

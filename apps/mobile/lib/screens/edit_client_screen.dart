@@ -57,7 +57,7 @@ class _EditClientScreenState extends State<EditClientScreen> {
     } catch (e) {
       setState(() {
         _loading = false;
-        _error = 'Failed to load: $e';
+        _error = 'Failed to load client details. Please try again.';
       });
     }
   }
@@ -93,7 +93,7 @@ class _EditClientScreenState extends State<EditClientScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update client: $e')),
+          const SnackBar(content: Text('Failed to update client. Please try again.')),
         );
       }
     } finally {

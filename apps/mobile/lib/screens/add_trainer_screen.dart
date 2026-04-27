@@ -82,7 +82,7 @@ class _AddTrainerScreenState extends State<AddTrainerScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Failed to add trainer: $e')));
+            .showSnackBar(const SnackBar(content: Text('Failed to add trainer. Please try again.')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);

@@ -1,25 +1,28 @@
 # The Training Triangle App
 
-The Training Triangle App is a cross-platform web and mobile application that connects **Training Companies**, **Freelance Trainers**, and **Clients** to streamline training management and delivery.
+The Training Triangle App is a cross-platform web and a mobile app designed to bring together Training Companies, Freelance Trainers and Clients in order to help with the organization of training programs as well as their distribution.
 
-## Core Features
-- Central calendar and scheduler  
-- Trainer assignment and document tracking  
-- Client and venue management  
-- Compliance & certification tracking  
-- Reporting suite and LMS integration  
+## Primary Functions
+
+- Scheduling tool for all users 
+- System to manage trainers and documents 
+- Management system for clients and venues 
+- Certification compliance tool 
+- Reporting suite and LMS Integration
 
 ## Tech Stack
-- Mobile: Flutter (iOS & Android)  
-- Web: React.js (Vite)  
-- Backend: Node.js / Firebase / AWS Lambda  
-- Database: Firestore or PostgreSQL  
-- Integrations: Stripe, Xero, Moodle, DocuSign  
 
-## Repository Info
-This repository contains:
-- `apps/mobile` – Flutter mobile app  
-- `apps/web` – React web app  
-- `apps/api` – Node.js API  
-- `packages/shared` – Shared types & constants  
+- Mobile: Flutter (Android/iOS)
+- Web: React.js (Vite)
+- Back-end: Node.js/Firebase/AWS Lambda 
+- Database: Firestore/PostgreSQL
+- Integrations: Stripe/Xero/Moodle/DocuSign
 
+## Repository Details
+
+This repository will contain:
+
+- apps/mobile – Flutter mobile app
+- apps/web – React web app
+- apps/api – Node.js API 
+- packages/shared – Shared types/constants

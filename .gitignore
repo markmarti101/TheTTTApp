@@ -61,3 +61,12 @@ firebase-debug.*.log
 tmp/
 temp/
 .cache/
+
+# Report drafts (local only, not for repo)
+report/
+
+# Security remediation log (local only)
+SECURITY_REMAINING.md
+
+# Word temp lock files
+~$*
